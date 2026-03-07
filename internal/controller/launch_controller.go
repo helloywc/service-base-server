@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"code-server/internal/service"
 	"code-server/internal/view"
@@ -32,10 +33,20 @@ func (c *LaunchController) validateName(name string) bool {
 	return name != "" && safeName.MatchString(name)
 }
 
+// nameFromPath 从路径中解析服务名，兼容 Go 1.21 无 PathValue 时使用
+func nameFromPath(path, prefix string) string {
+	s := strings.TrimPrefix(path, prefix)
+	s = strings.Trim(s, "/")
+	if i := strings.Index(s, "/"); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
 // Bootstrap 执行 launchctl bootstrap
-// POST /api/bootstrap/{name}  例如 name=mysql-dev
+// GET/POST /api/bootstrap/{name}  例如 /api/bootstrap/mysql-dev
 func (c *LaunchController) Bootstrap(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name := nameFromPath(r.URL.Path, "/api/bootstrap/")
 	if !c.validateName(name) {
 		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
 		return
@@ -55,9 +66,9 @@ func (c *LaunchController) Bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 // Bootout 执行 launchctl bootout
-// POST /api/bootout/{name}  例如 name=mysql-dev
+// GET/POST /api/bootout/{name}  例如 /api/bootout/mysql-dev
 func (c *LaunchController) Bootout(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name := nameFromPath(r.URL.Path, "/api/bootout/")
 	if !c.validateName(name) {
 		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
 		return
