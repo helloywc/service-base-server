@@ -6,11 +6,73 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
 const databasesBase = "/Users/yang/Operator/Databases"
+
+// parentDirForName 根据 name 解析目录路径并返回其父目录（与 Archive 中 zip 所在目录一致）
+func parentDirForName(name string) (string, error) {
+	rel := strings.ReplaceAll(name, "-", "/")
+	dirPath := filepath.Join(databasesBase, rel)
+	dirPath = filepath.Clean(dirPath)
+	baseClean := filepath.Clean(databasesBase)
+	if dirPath != baseClean && !strings.HasPrefix(dirPath, baseClean+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid path: %s", dirPath)
+	}
+	return filepath.Dir(dirPath), nil
+}
+
+// 文件名中的时间格式与 zip 命名一致：name_2006-01-02_15-04-05.zip
+const archiveTimeLayout = "2006-01-02_15-04-05"
+
+// ListArchiveFiles 列出以 name_ 或 name- 开头的所有文件，仅返回文件名（无路径、无 .zip 后缀），按日期倒序（越新的越前）
+func ListArchiveFiles(name string) ([]string, error) {
+	parentDir, err := parentDirForName(name)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(parentDir)
+	if err != nil {
+		return nil, fmt.Errorf("read dir: %w", err)
+	}
+	prefixUnderscore := name + "_"
+	prefixHyphen := name + "-"
+	type fileWithTime struct {
+		displayName string
+		t           time.Time
+	}
+	var list []fileWithTime
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		var suffix string
+		if strings.HasPrefix(e.Name(), prefixUnderscore) {
+			suffix = strings.TrimPrefix(e.Name(), prefixUnderscore)
+		} else if strings.HasPrefix(e.Name(), prefixHyphen) {
+			suffix = strings.TrimPrefix(e.Name(), prefixHyphen)
+		} else {
+			continue
+		}
+		suffix = strings.TrimSuffix(suffix, ".zip")
+		t, err := time.Parse(archiveTimeLayout, suffix)
+		if err != nil {
+			t = time.Time{} // 解析失败排到最末
+		}
+		displayName := strings.TrimSuffix(e.Name(), ".zip")
+		list = append(list, fileWithTime{displayName, t})
+	}
+	// 按时间倒序：越新越前
+	sort.Slice(list, func(i, j int) bool { return list[i].t.After(list[j].t) })
+	out := make([]string, len(list))
+	for i, f := range list {
+		out[i] = f.displayName
+	}
+	return out, nil
+}
 
 // Archive 将 name 对应目录打 zip 包，放在同级目录，命名为 name_YYYY-MM-DD_HH-mm-ss.zip
 // name "mysql-dev" -> 目录 .../mysql/dev，zip 如 mysql-dev_2026-03-08_06-52-26.zip
