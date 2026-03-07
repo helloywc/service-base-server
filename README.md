@@ -45,6 +45,7 @@ PORT=3000 go run ./cmd/server
 | POST | `/api/bootstrap/{name}` | 执行命令 `launchctl bootstrap ...`，如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
 | POST | `/api/bootout/{name}` | 执行命令 `launchctl bootout ...`，如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
 | GET | `/api/list/{name}` | 查询状态（`launchctl list | grep name`），如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
+| POST | `/api/archive/{name}` | 将 name 对应目录打 zip（name 中 `-` 映射为路径 `/`，如 `mysql-dev` -> `.../mysql/dev`），zip 放在同级目录，命名为 `name_YYYY-MM-DD_HH-mm-ss.zip`；成功返回 HTTP 200，body 中 `stdout` 为 zip 绝对路径 |
 
 `name` 仅允许字母、数字、`_`、`.`、`-`。plist 路径：`/Users/wilson1/Library/LaunchAgents/{name}.plist`。
 

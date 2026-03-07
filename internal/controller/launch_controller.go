@@ -120,3 +120,27 @@ func (c *LaunchController) List(w http.ResponseWriter, r *http.Request) {
 		Stdout: res.Stdout, Stderr: res.Stderr,
 	})
 }
+
+// Archive 将 name 对应目录打 zip 包（仅 POST）
+// name "mysql-dev" -> 目录 .../mysql/dev，zip 放在同级，命名为 mysql-dev_YYYY-MM-DD_HH-mm-ss.zip
+// POST /api/archive/{name}
+func (c *LaunchController) Archive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use POST"})
+		return
+	}
+	name := nameFromPath(r.URL.Path, "/api/archive/")
+	if !c.validateName(name) {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
+		return
+	}
+	zipPath, err := service.Archive(name)
+	if err != nil {
+		c.writeJSON(w, http.StatusInternalServerError, view.ErrorResponse{Code: 500, Message: err.Error()})
+		return
+	}
+	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
+		Code: 200, Message: "archive ok",
+		Stdout: zipPath, Stderr: "",
+	})
+}
