@@ -29,12 +29,24 @@
 ## 运行
 
 ```bash
-# 默认端口 8080
+# 开发环境（默认）：端口 8080
 go run ./cmd/server
+# 或显式
+APP_ENV=dev go run ./cmd/server
 
-# 指定端口
+# 生产环境：端口 8090
+APP_ENV=prod go run ./cmd/server
+
+# 自定义端口（覆盖 APP_ENV 的默认端口）
 PORT=3000 go run ./cmd/server
 ```
+
+**环境变量**
+
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `APP_ENV` | `dev` → 8080，`prod` → 8090 | `dev`（8080） |
+| `PORT` | 监听端口，设置时优先于 `APP_ENV` | 见上 |
 
 ## 接口
 
