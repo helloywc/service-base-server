@@ -43,6 +43,17 @@ func nameFromPath(path, prefix string) string {
 	return s
 }
 
+// nameAndTimestampFromPath 从路径解析 name 与 timestamp，如 /api/extract/mysql-dev/2026-03-08_07-16-48
+func nameAndTimestampFromPath(path, prefix string) (name, timestamp string, ok bool) {
+	s := strings.TrimPrefix(path, prefix)
+	s = strings.Trim(s, "/")
+	parts := strings.SplitN(s, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
 // Bootstrap 执行 launchctl bootstrap（仅 POST）
 // POST /api/bootstrap/{name}  例如 /api/bootstrap/mysql-dev
 func (c *LaunchController) Bootstrap(w http.ResponseWriter, r *http.Request) {
@@ -172,5 +183,38 @@ func (c *LaunchController) Archive(w http.ResponseWriter, r *http.Request) {
 	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
 		Code: 200, Message: "archive ok",
 		Stdout: zipPath, Stderr: "",
+	})
+}
+
+// 时间戳格式：YYYY-MM-DD_HH-mm-ss
+var timestampRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$`)
+
+// Extract 解压 name 对应的 zip（timestamp 如 2026-03-08_07-16-48）到 zip 所在目录（仅 POST）
+// POST /api/extract/{name}/{timestamp}  例如 /api/extract/mysql-dev/2026-03-08_07-16-48
+func (c *LaunchController) Extract(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use POST", Stdout: "", Stderr: ""})
+		return
+	}
+	name, timestamp, ok := nameAndTimestampFromPath(r.URL.Path, "/api/extract/")
+	if !ok {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid path, use /api/extract/{name}/{timestamp}", Stdout: "", Stderr: ""})
+		return
+	}
+	if !c.validateName(name) {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)", Stdout: "", Stderr: ""})
+		return
+	}
+	if !timestampRegex.MatchString(timestamp) {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid timestamp, use YYYY-MM-DD_HH-mm-ss", Stdout: "", Stderr: ""})
+		return
+	}
+	if err := service.Extract(name, timestamp); err != nil {
+		c.writeJSON(w, http.StatusInternalServerError, view.ErrorResponse{Code: 500, Message: err.Error(), Stdout: "", Stderr: ""})
+		return
+	}
+	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
+		Code: 200, Message: "extract ok",
+		Stdout: "", Stderr: "",
 	})
 }

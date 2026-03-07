@@ -24,6 +24,7 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/api/bootout/", launchCtrl.Bootout)
 	mux.HandleFunc("/api/list/", launchCtrl.List)
 	mux.HandleFunc("/api/archive/", launchCtrl.Archive)
+	mux.HandleFunc("/api/extract/", launchCtrl.Extract)
 
 	return &http.Server{
 		Addr:         ":" + addr,

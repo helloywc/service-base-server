@@ -46,7 +46,8 @@ PORT=3000 go run ./cmd/server
 | POST | `/api/bootout/{name}` | 执行命令 `launchctl bootout ...`，如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
 | GET | `/api/list/{name}` | 查询状态（`launchctl list | grep name`），如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
 | POST | `/api/archive/{name}` | 将 name 对应目录打 zip，zip 放在同级，命名为 `name_YYYY-MM-DD_HH-mm-ss.zip`；成功返回 HTTP 200，`stdout` 为 zip 绝对路径 |
-| GET | `/api/archive/{name}` | 列出以 `name_` 开头的所有文件，返回 `files` 数组（完整路径），按日期倒序（越新越前） |
+| GET | `/api/archive/{name}` | 列出以 `name_` 或 `name-` 开头的文件，返回 `files` 数组（仅文件名、无 .zip），按日期倒序 |
+| POST | `/api/extract/{name}/{timestamp}` | 解压对应 zip 到 zip 所在目录；timestamp 格式 `YYYY-MM-DD_HH-mm-ss`，如 `mysql-dev` + `2026-03-08_07-16-48` |
 
 `name` 仅允许字母、数字、`_`、`.`、`-`。plist 路径：`/Users/wilson1/Library/LaunchAgents/{name}.plist`。
 

@@ -144,3 +144,62 @@ func Archive(name string) (zipPath string, err error) {
 	}
 	return zipPath, nil
 }
+
+// Extract 将 name 对应的 zip（timestamp 如 2026-03-08_07-16-48）解压到该 zip 所在目录（当前目录）
+func Extract(name, timestamp string) error {
+	parentDir, err := parentDirForName(name)
+	if err != nil {
+		return err
+	}
+	zipName1 := name + "_" + timestamp + ".zip"
+	zipName2 := name + "-" + timestamp + ".zip"
+	var zipPath string
+	for _, n := range []string{zipName1, zipName2} {
+		p := filepath.Join(parentDir, n)
+		if _, err := os.Stat(p); err == nil {
+			zipPath = p
+			break
+		}
+	}
+	if zipPath == "" {
+		return fmt.Errorf("zip not found: %s or %s", zipName1, zipName2)
+	}
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return fmt.Errorf("open zip: %w", err)
+	}
+	defer r.Close()
+	destDir := filepath.Clean(parentDir)
+	for _, f := range r.File {
+		dest := filepath.Join(destDir, f.Name)
+		cleanDest := filepath.Clean(dest)
+		if cleanDest != destDir && !strings.HasPrefix(cleanDest, destDir+string(os.PathSeparator)) {
+			return fmt.Errorf("zip slip: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", dest, err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
+		}
+		out, err := os.Create(dest)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", dest, err)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			out.Close()
+			return fmt.Errorf("open zip entry %s: %w", f.Name, err)
+		}
+		_, err = io.Copy(out, rc)
+		rc.Close()
+		out.Close()
+		if err != nil {
+			return fmt.Errorf("write %s: %w", dest, err)
+		}
+	}
+	return nil
+}
