@@ -22,6 +22,7 @@ func New(addr string) *http.Server {
 	launchCtrl := controller.NewLaunchController(launchSvc)
 	mux.HandleFunc("/api/bootstrap/", launchCtrl.Bootstrap)
 	mux.HandleFunc("/api/bootout/", launchCtrl.Bootout)
+	mux.HandleFunc("/api/list/", launchCtrl.List)
 
 	return &http.Server{
 		Addr:         ":" + addr,

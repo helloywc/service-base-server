@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const launchAgentsDir = "/Users/wilson1/Library/LaunchAgents"
@@ -51,4 +52,21 @@ func (l *LaunchCtl) Bootout(name string) (CmdResult, error) {
 	domain := fmt.Sprintf("gui/%d", os.Getuid())
 	cmd := exec.Command("launchctl", "bootout", domain, plistPath)
 	return l.run(cmd)
+}
+
+// List 执行 launchctl list 并过滤包含 name 的行（等价于 launchctl list | grep name），返回过滤后的输出
+func (l *LaunchCtl) List(name string) (CmdResult, error) {
+	cmd := exec.Command("launchctl", "list")
+	res, err := l.run(cmd)
+	if err != nil {
+		return res, err
+	}
+	var out []string
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		if strings.Contains(line, name) {
+			out = append(out, line)
+		}
+	}
+	res.Stdout = strings.Join(out, "\n")
+	return res, nil
 }

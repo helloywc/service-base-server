@@ -42,8 +42,9 @@ PORT=3000 go run ./cmd/server
 |------|------|------|
 | GET | `/` | 欢迎信息 |
 | GET | `/health` | 健康检查（探活） |
-| POST | `/api/bootstrap/{name}` | 执行 `launchctl bootstrap gui/$(id -u) .../name.plist`，如 `mysql-dev` |
-| POST | `/api/bootout/{name}` | 执行 `launchctl bootout gui/$(id -u) .../name.plist`，如 `mysql-dev` |
+| POST | `/api/bootstrap/{name}` | 执行命令 `launchctl bootstrap ...`，如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
+| POST | `/api/bootout/{name}` | 执行命令 `launchctl bootout ...`，如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
+| GET | `/api/list/{name}` | 查询状态（`launchctl list | grep name`），如 `mysql-dev`；成功返回 HTTP 200 且 body 含 `code: 200` |
 
 `name` 仅允许字母、数字、`_`、`.`、`-`。plist 路径：`/Users/wilson1/Library/LaunchAgents/{name}.plist`。
 

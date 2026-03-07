@@ -43,9 +43,13 @@ func nameFromPath(path, prefix string) string {
 	return s
 }
 
-// Bootstrap 执行 launchctl bootstrap
-// GET/POST /api/bootstrap/{name}  例如 /api/bootstrap/mysql-dev
+// Bootstrap 执行 launchctl bootstrap（仅 POST）
+// POST /api/bootstrap/{name}  例如 /api/bootstrap/mysql-dev
 func (c *LaunchController) Bootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use POST"})
+		return
+	}
 	name := nameFromPath(r.URL.Path, "/api/bootstrap/")
 	if !c.validateName(name) {
 		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
@@ -60,14 +64,18 @@ func (c *LaunchController) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
-		Message: "bootstrap ok",
-		Stdout:  res.Stdout, Stderr: res.Stderr,
+		Code: 200, Message: "bootstrap ok",
+		Stdout: res.Stdout, Stderr: res.Stderr,
 	})
 }
 
-// Bootout 执行 launchctl bootout
-// GET/POST /api/bootout/{name}  例如 /api/bootout/mysql-dev
+// Bootout 执行 launchctl bootout（仅 POST）
+// POST /api/bootout/{name}  例如 /api/bootout/mysql-dev
 func (c *LaunchController) Bootout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use POST"})
+		return
+	}
 	name := nameFromPath(r.URL.Path, "/api/bootout/")
 	if !c.validateName(name) {
 		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
@@ -82,7 +90,33 @@ func (c *LaunchController) Bootout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
-		Message: "bootout ok",
-		Stdout:  res.Stdout, Stderr: res.Stderr,
+		Code: 200, Message: "bootout ok",
+		Stdout: res.Stdout, Stderr: res.Stderr,
+	})
+}
+
+// List 查询 launchctl list | grep name（仅 GET）
+// GET /api/list/{name}  例如 /api/list/mysql-dev
+func (c *LaunchController) List(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use GET"})
+		return
+	}
+	name := nameFromPath(r.URL.Path, "/api/list/")
+	if !c.validateName(name) {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid or missing name (use only letters, numbers, _, ., -)"})
+		return
+	}
+	res, err := c.launch.List(name)
+	if err != nil {
+		c.writeJSON(w, http.StatusInternalServerError, view.ErrorResponse{
+			Code: 500, Message: err.Error(),
+			Stdout: res.Stdout, Stderr: res.Stderr,
+		})
+		return
+	}
+	c.writeJSON(w, http.StatusOK, view.LaunchResponse{
+		Code: 200, Message: "list ok",
+		Stdout: res.Stdout, Stderr: res.Stderr,
 	})
 }
