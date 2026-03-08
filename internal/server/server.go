@@ -33,7 +33,7 @@ func New(addr string) *http.Server {
 
 	return &http.Server{
 		Addr:         ":" + addr,
-		Handler:      mux,
+		Handler:      corsHandler(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}
