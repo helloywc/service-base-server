@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -202,4 +203,46 @@ func Extract(name, timestamp string) error {
 		}
 	}
 	return nil
+}
+
+// 从文件名（无 .zip）解析 name，支持 name_timestamp 或 name-timestamp
+var archiveFilenameRegex = regexp.MustCompile(`^(.+)[_-](\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})$`)
+
+// DeleteArchiveFiles 根据文件名数组删除对应 zip，文件名无 .zip 后缀；返回已删除列表与失败列表（含原因）
+func DeleteArchiveFiles(filenames []string) (deleted, failed []string) {
+	for _, filename := range filenames {
+		filename = strings.TrimSpace(filename)
+		if filename == "" {
+			continue
+		}
+		// 支持 name_timestamp 或 name-timestamp（后者正则只匹配 _，需兼容）
+		subs := archiveFilenameRegex.FindStringSubmatch(filename)
+		if len(subs) != 3 {
+			failed = append(failed, filename+": invalid format (need name_YYYY-MM-DD_HH-mm-ss)")
+			continue
+		}
+		name := subs[1]
+		parentDir, err := parentDirForName(name)
+		if err != nil {
+			failed = append(failed, filename+": "+err.Error())
+			continue
+		}
+		// 只允许 name_ 或 name- 开头的文件名
+		if !strings.HasPrefix(filename, name+"_") && !strings.HasPrefix(filename, name+"-") {
+			failed = append(failed, filename+": name mismatch")
+			continue
+		}
+		zipPath := filepath.Join(parentDir, filename+".zip")
+		zipPath = filepath.Clean(zipPath)
+		if zipPath != parentDir && !strings.HasPrefix(zipPath, parentDir+string(os.PathSeparator)) {
+			failed = append(failed, filename+": path invalid")
+			continue
+		}
+		if err := os.Remove(zipPath); err != nil {
+			failed = append(failed, filename+": "+err.Error())
+			continue
+		}
+		deleted = append(deleted, filename)
+	}
+	return deleted, failed
 }

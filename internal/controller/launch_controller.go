@@ -218,3 +218,36 @@ func (c *LaunchController) Extract(w http.ResponseWriter, r *http.Request) {
 		Stdout: "", Stderr: "",
 	})
 }
+
+// 文件名（无 .zip）允许字母、数字、下划线、连字符
+var safeArchiveFilename = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+
+// DeleteArchives 批量删除 zip（仅 POST）；body 为 JSON 数组，如 ["mysql-dev_2026-03-08_17-44-45", ...]
+// POST /api/archives/delete
+func (c *LaunchController) DeleteArchives(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.writeJSON(w, http.StatusMethodNotAllowed, view.ErrorResponse{Code: 405, Message: "method not allowed, use POST", Stdout: "", Stderr: ""})
+		return
+	}
+	var filenames []string
+	if err := json.NewDecoder(r.Body).Decode(&filenames); err != nil {
+		c.writeJSON(w, http.StatusBadRequest, view.ErrorResponse{Code: 400, Message: "invalid body, expect JSON array of strings", Stdout: "", Stderr: ""})
+		return
+	}
+	var valid []string
+	for _, f := range filenames {
+		f = strings.TrimSpace(f)
+		if f != "" && safeArchiveFilename.MatchString(f) {
+			valid = append(valid, f)
+		}
+	}
+	deleted, failed := service.DeleteArchiveFiles(valid)
+	msg := "delete ok"
+	if len(failed) > 0 {
+		msg = "partial"
+	}
+	c.writeJSON(w, http.StatusOK, view.DeleteArchivesResponse{
+		Code: 200, Message: msg,
+		Deleted: deleted, Failed: failed,
+	})
+}

@@ -16,3 +16,11 @@ type ErrorResponse struct {
 	Stdout  string `json:"stdout"`
 	Stderr  string `json:"stderr"`
 }
+
+// DeleteArchivesResponse 批量删除 zip 的响应
+type DeleteArchivesResponse struct {
+	Code    int      `json:"code"`
+	Message string   `json:"message"`
+	Deleted []string `json:"deleted"` // 已删除的文件名（无 .zip）
+	Failed  []string `json:"failed"`  // 删除失败的文件名及原因，如 "file: not found"
+}
