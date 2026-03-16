@@ -6,6 +6,7 @@ import (
 
 	"code-server/internal/controller"
 	"code-server/internal/handler"
+	"code-server/internal/meili"
 	"code-server/internal/service"
 )
 
@@ -27,6 +28,11 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/api/list/", launchCtrl.List)
 	mux.HandleFunc("/api/archive/", launchCtrl.Archive)
 	mux.HandleFunc("/api/extract/", launchCtrl.Extract)
+
+	// Meilisearch 索引与文档增删改查（环境变量 MEILISEARCH_HOST、MEILISEARCH_API_KEY）
+	meiliClient := meili.NewClient()
+	meiliCtrl := controller.NewMeiliController(meiliClient)
+	mux.HandleFunc("/api/meili/", meiliCtrl.MeiliDispatch)
 
 	// 兜底放最后
 	mux.HandleFunc("/", handler.Home)

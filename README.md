@@ -47,6 +47,8 @@ PORT=3000 go run ./cmd/server
 |------|------|------|
 | `APP_ENV` | `dev` → 8080，`prod` → 8090 | `dev`（8080） |
 | `PORT` | 监听端口，设置时优先于 `APP_ENV` | 见上 |
+| `MEILISEARCH_HOST` | Meilisearch 地址 | `http://localhost:7700` |
+| `MEILISEARCH_API_KEY` | Meilisearch API Key | `123456` |
 
 ## 接口
 
@@ -61,6 +63,22 @@ PORT=3000 go run ./cmd/server
 | GET | `/api/archive/{name}` | 列出以 `name_` 或 `name-` 开头的文件，返回 `files` 数组（仅文件名、无 .zip），按日期倒序 |
 | POST | `/api/extract/{name}/{timestamp}` | 解压对应 zip 到 zip 所在目录；timestamp 格式 `YYYY-MM-DD_HH-mm-ss`，如 `mysql-dev` + `2026-03-08_07-16-48` |
 | POST | `/api/archives/delete` | Body 为 JSON 数组，如 `["mysql-dev_2026-03-08_17-44-45", ...]`，按文件名删除对应 zip |
+
+### Meilisearch（索引与文档，供前端调用）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/meili/indexes` | 索引列表 |
+| POST | `/api/meili/indexes` | 创建索引，body `{"uid":"movies","primaryKey":"id"}` |
+| GET | `/api/meili/indexes/:uid` | 获取单个索引 |
+| PUT | `/api/meili/indexes/:uid` | 更新索引，body `{"primaryKey":"id"}` |
+| DELETE | `/api/meili/indexes/:uid` | 删除索引 |
+| PUT | `/api/meili/indexes/:uid/documents` | 添加/替换文档，body 为对象数组 `[{...}]` |
+| GET | `/api/meili/indexes/:uid/documents` | 文档列表，query `limit`、`offset` |
+| GET | `/api/meili/indexes/:uid/documents/:documentId` | 获取单条文档 |
+| DELETE | `/api/meili/indexes/:uid/documents/:documentId` | 删除单条文档 |
+| POST | `/api/meili/indexes/:uid/documents/delete-batch` | 批量删除，body `{"ids":["1","2"]}` |
+| DELETE | `/api/meili/indexes/:uid/documents` | 删除该索引下全部文档 |
 
 `name` 仅允许字母、数字、`_`、`.`、`-`。plist 路径：`/Users/wilson1/Library/LaunchAgents/{name}.plist`。
 
@@ -139,12 +157,135 @@ curl -X POST http://localhost:8080/api/archives/delete \
 
 ---
 
+### Meilisearch（索引与文档）
+
+需本地运行 Meilisearch（如 `http://localhost:7700`），并设置 `MEILISEARCH_HOST`、`MEILISEARCH_API_KEY`（默认 key 为 `123456`）。响应格式与 Meilisearch 官方 API 一致。
+
+```bash
+# 索引：列表、创建、获取、更新、删除
+curl http://localhost:8080/api/meili/indexes
+curl -X POST http://localhost:8080/api/meili/indexes -H "Content-Type: application/json" -d '{"uid":"movies","primaryKey":"id"}'
+curl http://localhost:8080/api/meili/indexes/movies
+curl -X PUT http://localhost:8080/api/meili/indexes/movies -H "Content-Type: application/json" -d '{"primaryKey":"id"}'
+curl -X DELETE http://localhost:8080/api/meili/indexes/movies
+
+# 文档：添加、列表、获取一条、删除一条、批量删除、清空
+curl -X PUT http://localhost:8080/api/meili/indexes/movies/documents -H "Content-Type: application/json" -d '[{"id":1,"title":"Hello"}]'
+curl "http://localhost:8080/api/meili/indexes/movies/documents?limit=10&offset=0"
+curl http://localhost:8080/api/meili/indexes/movies/documents/1
+curl -X DELETE http://localhost:8080/api/meili/indexes/movies/documents/1
+curl -X POST http://localhost:8080/api/meili/indexes/movies/documents/delete-batch -H "Content-Type: application/json" -d '{"ids":["1","2"]}'
+curl -X DELETE http://localhost:8080/api/meili/indexes/movies/documents
+```
+
+---
+
 ### 错误与约定
 
 - 参数错误：HTTP 400，body 含 `code`、`message`。
 - 方法不允许：HTTP 405（如对 bootstrap 发 GET）。
 - 服务端错误：HTTP 500，`message` 为错误信息。
 - 成功一律 HTTP 200，且 body 中 `code: 200`（列表接口还有 `files`）。
+
+---
+
+## curl 示例汇总
+
+以下将 `BASE` 设为 `http://localhost:8080`，远程可改为 `http://192.168.2.101:8080` 等。按需复制执行。
+
+```bash
+BASE=http://localhost:8080
+```
+
+### 通用
+
+```bash
+# 欢迎页
+curl $BASE/
+
+# 健康检查
+curl $BASE/health
+```
+
+### LaunchAgent（launchctl）
+
+```bash
+# 启动服务（如 mysql-dev）
+curl -X POST $BASE/api/bootstrap/mysql-dev
+
+# 停止服务
+curl -X POST $BASE/api/bootout/mysql-dev
+
+# 查询状态（是否在运行）
+curl $BASE/api/list/mysql-dev
+```
+
+### 压缩与解压
+
+```bash
+# 打包：将 mysql-dev 对应目录打 zip
+curl -X POST $BASE/api/archive/mysql-dev
+
+# 列表：列出该 name 下的 zip 文件名（无 .zip）
+curl $BASE/api/archive/mysql-dev
+
+# 解压：按时间戳解压到当前目录
+curl -X POST $BASE/api/extract/mysql-dev/2026-03-08_07-16-48
+
+# 批量删除 zip（body 为文件名数组）
+curl -X POST $BASE/api/archives/delete \
+  -H "Content-Type: application/json" \
+  -d '["mysql-dev_2026-03-08_17-44-45","mysql-dev_2026-03-08_15-00-07"]'
+```
+
+### Meilisearch 索引
+
+```bash
+# 索引列表
+curl $BASE/api/meili/indexes
+
+# 创建索引（uid + 可选 primaryKey）
+curl -X POST $BASE/api/meili/indexes \
+  -H "Content-Type: application/json" \
+  -d '{"uid":"movies","primaryKey":"id"}'
+
+# 获取单个索引
+curl $BASE/api/meili/indexes/movies
+
+# 更新索引（如改 primaryKey）
+curl -X PUT $BASE/api/meili/indexes/movies \
+  -H "Content-Type: application/json" \
+  -d '{"primaryKey":"id"}'
+
+# 删除索引
+curl -X DELETE $BASE/api/meili/indexes/movies
+```
+
+### Meilisearch 文档
+
+```bash
+# 添加/替换文档（body 为对象数组）
+curl -X PUT $BASE/api/meili/indexes/movies/documents \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"title":"Hello World"},{"id":2,"title":"Foo"}]'
+
+# 文档列表（分页）
+curl "$BASE/api/meili/indexes/movies/documents?limit=10&offset=0"
+
+# 获取单条文档
+curl $BASE/api/meili/indexes/movies/documents/1
+
+# 删除单条文档
+curl -X DELETE $BASE/api/meili/indexes/movies/documents/1
+
+# 批量删除文档
+curl -X POST $BASE/api/meili/indexes/movies/documents/delete-batch \
+  -H "Content-Type: application/json" \
+  -d '{"ids":["1","2","3"]}'
+
+# 删除该索引下全部文档
+curl -X DELETE $BASE/api/meili/indexes/movies/documents
+```
 
 ## 构建
 
