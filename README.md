@@ -28,16 +28,32 @@
 
 ## 运行
 
+支持用 **`.env`** 配置（类似 Node.js 的 dotenv），启动时自动加载项目根目录下的：
+
+1. **`.env`** — 默认配置（已有环境变量不覆盖）
+2. **`.env.{APP_ENV}`** — 如 `.env.prod`，按环境覆盖
+3. **`.env.local`** — 本地覆盖，建议加入 `.gitignore`
+
 ```bash
+# 复制示例后按需修改
+cp .env.example .env
+
 # 开发环境（默认）：端口 8080
 go run ./cmd/server
-# 或显式
-APP_ENV=dev go run ./cmd/server
+# 或
+make dev
 
-# 生产环境：端口 8090
+# 生产环境：端口 8090（或 .env 里设 APP_ENV=prod）
 APP_ENV=prod go run ./cmd/server
+# 或
+make prod
+```
 
-# 自定义端口（覆盖 APP_ENV 的默认端口）
+`.env` 中设置 `APP_ENV=development` 或 `APP_ENV=prod`，会加载 `.env.development` 或 `.env.prod`。
+
+也可直接使用环境变量，优先级高于 `.env`：
+
+```bash
 PORT=3000 go run ./cmd/server
 ```
 
@@ -45,7 +61,7 @@ PORT=3000 go run ./cmd/server
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `APP_ENV` | `dev` → 8080，`prod` → 8090 | `dev`（8080） |
+| `APP_ENV` | `development` → 8080，`prod` → 8090 | `development`（8080） |
 | `PORT` | 监听端口，设置时优先于 `APP_ENV` | 见上 |
 | `MEILISEARCH_HOST` | Meilisearch 地址 | `http://localhost:7700` |
 | `MEILISEARCH_API_KEY` | Meilisearch API Key | `123456` |
@@ -86,7 +102,7 @@ PORT=3000 go run ./cmd/server
 
 ## 接口调用归纳
 
-以下假设服务地址为 `http://localhost:8080`（dev）。prod 为 8090，或使用 `http://<ip>:<port>`。
+以下假设服务地址为 `http://localhost:8080`（development）。prod 为 8090，或使用 `http://<ip>:<port>`。
 
 ### 通用
 

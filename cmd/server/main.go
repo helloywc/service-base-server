@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"code-server/internal/config"
 	"code-server/internal/server"
 )
 
@@ -22,23 +23,25 @@ func appEnv() string {
 	if buildEnv != "" {
 		return buildEnv
 	}
-	return "dev"
+	return "development"
 }
 
 func envOrUnknown(s string) string {
 	if s == "" {
-		return "dev"
+		return "development"
 	}
 	return s
 }
 
 func main() {
+	config.LoadEnv() // 加载 .env / .env.{APP_ENV} / .env.local（类似 Node dotenv）
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		switch appEnv() {
 		case "prod":
 			port = "8090"
-		case "dev", "":
+		case "development", "":
 			port = "8080"
 		default:
 			port = "8080"
