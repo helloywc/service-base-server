@@ -15,12 +15,16 @@ func New(addr string) *http.Server {
 	mux := http.NewServeMux()
 	launchSvc := service.NewLaunchCtl()
 	launchCtrl := controller.NewLaunchController(launchSvc)
+	contentVerifyCtrl := controller.NewContentVerifyController()
 
 	// 精确路径先注册，避免被 "/" 或 "/api/archive/" 抢匹配（Go 1.21 下 longest match 仍可能异常）
 	mux.HandleFunc("/api/archives/delete", launchCtrl.DeleteArchives)
 
 	// 通用
 	mux.HandleFunc("/health", handler.Health)
+
+	// AI 内容验证
+	mux.HandleFunc("/api/content-verify", contentVerifyCtrl.ContentVerify)
 
 	// API 前缀路由
 	mux.HandleFunc("/api/bootstrap/", launchCtrl.Bootstrap)

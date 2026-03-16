@@ -2,42 +2,81 @@ package config
 
 import (
 	"bufio"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-// LoadEnv 根据 APP_ENV 直接加载 .env.dev 或 .env.prod（无其它逻辑）
-// APP_ENV=prod 时加载 .env.prod，否则加载 .env.dev
-// 需在 main 入口最前面调用；若未设 APP_ENV，则加载 .env.dev
+// LoadEnv loads environment variables from .env files in a way
+// similar to Node's dotenv:
+//   - .env
+//   - .env.{APP_ENV}
+//   - .env.local
+// Files that do not exist are skipped. Existing environment
+// variables are not overwritten.
 func LoadEnv() {
-	if os.Getenv("APP_ENV") == "prod" {
-		loadFile(".env.prod")
+	appEnv := os.Getenv("APP_ENV")
+
+	var files []string
+	files = append(files, ".env")
+	if appEnv != "" {
+		files = append(files, ".env."+appEnv)
+	}
+	files = append(files, ".env.local")
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Printf("config: unable to get working directory: %v", err)
 		return
 	}
-	loadFile(".env.dev")
+
+	for _, name := range files {
+		path := filepath.Join(cwd, name)
+		if err := loadEnvFile(path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			log.Printf("config: error loading %s: %v", path, err)
+		}
+	}
 }
 
-func loadFile(name string) {
-	f, err := os.Open(name)
+func loadEnvFile(path string) error {
+	f, err := os.Open(path)
 	if err != nil {
-		return
+		return err
 	}
 	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip comments and empty lines.
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		i := strings.Index(line, "=")
-		if i <= 0 {
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
 			continue
 		}
-		key := strings.TrimSpace(line[:i])
-		val := strings.TrimSpace(line[i+1:])
-		val = strings.Trim(val, "\"'")
-		if key != "" {
-			os.Setenv(key, val)
+
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		if key == "" {
+			continue
+		}
+
+		// Do not overwrite existing environment variables.
+		if _, exists := os.LookupEnv(key); !exists {
+			if err := os.Setenv(key, val); err != nil {
+				log.Printf("config: failed to set %s from %s: %v", key, path, err)
+			}
 		}
 	}
+
+	return scanner.Err()
 }
+
