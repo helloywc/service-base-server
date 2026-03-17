@@ -39,6 +39,11 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/api/deepseek", contentVerifyCtrl.ContentVerify)
 	mux.HandleFunc("/api/deepseek/", contentVerifyCtrl.ContentVerify)
 
+	// /api/deepseek-verify 扩展：后台持续校验任务
+	mux.HandleFunc("/api/deepseek-verify/start", deepseekVerifyCtrl.DeepseekVerifyStart)
+	mux.HandleFunc("/api/deepseek-verify/stop", deepseekVerifyCtrl.DeepseekVerifyStop)
+	mux.HandleFunc("/api/deepseek-verify/status", deepseekVerifyCtrl.DeepseekVerifyStatus)
+
 	mux.HandleFunc("/api/deepseek-verify", deepseekVerifyCtrl.DeepseekVerify)
 	mux.HandleFunc("/api/deepseek-verify/", deepseekVerifyCtrl.DeepseekVerify)
 

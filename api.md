@@ -432,6 +432,77 @@ curl -X POST http://localhost:8080/api/deepseek \
 
 ---
 
+### Deepseek 校验任务（DB 驱动）/deepseek-verify
+
+该组接口会：
+
+- **从表 `ai_agent_text`** 读取 `key` 对应的 `content` 作为 `messages[0].content`（system）
+- **从表 `bilibili_video`** 读取 `status=1` 且 `priority` 最大的一条的 `context` 作为 `messages[1].content`（user）
+- 调用 Deepseek `https://api.deepseek.com/chat/completions`，并解析 `choices[0].message.content`
+- **成功**：将该条 `bilibili_video.context` 更新为模型返回 content，并将 `status=2`
+- **失败**：将该条 `bilibili_video.status=-2`
+
+#### 1) 启动持续校验任务 `/api/deepseek-verify/start`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/deepseek-verify/start` | 启动后台循环：无论成功/失败都会继续处理下一条，直到没有 `status=1` 的记录自动停止 |
+
+**curl**
+
+```bash
+curl -X POST http://localhost:8080/api/deepseek-verify/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "text-verify",
+    "table": "bilibili_video"
+  }'
+```
+
+**响应示例**
+
+```json
+{ "running": true, "key": "text-verify" }
+```
+
+#### 2) 停止持续校验任务 `/api/deepseek-verify/stop`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/deepseek-verify/stop` | 终止后台持续校验任务 |
+
+**curl**
+
+```bash
+curl -X POST http://localhost:8080/api/deepseek-verify/stop
+```
+
+**响应示例**
+
+```json
+{ "running": false }
+```
+
+#### 3) 查询任务状态 `/api/deepseek-verify/status`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/deepseek-verify/status` | 查询后台持续校验任务是否运行 |
+
+**curl**
+
+```bash
+curl http://localhost:8080/api/deepseek-verify/status
+```
+
+**响应示例**
+
+```json
+{ "running": true, "key": "text-verify" }
+```
+
+（若未运行则 `running=false`，`key` 可能为空。）
+
 ## 七、错误码
 
 | HTTP 状态 | 说明 |
