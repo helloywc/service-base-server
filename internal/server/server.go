@@ -1,10 +1,12 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"time"
 
 	"code-server/internal/controller"
+	"code-server/internal/db"
 	"code-server/internal/handler"
 	"code-server/internal/meili"
 	"code-server/internal/service"
@@ -17,6 +19,13 @@ func New(addr string) *http.Server {
 	launchCtrl := controller.NewLaunchController(launchSvc)
 	contentVerifyCtrl := controller.NewContentVerifyController()
 
+	sqlDB, err := db.OpenMySQL(db.PoolConfig{})
+	if err != nil {
+		log.Printf("server: MySQL open failed (api/deepseek-verify will return 503): %v", err)
+		sqlDB = nil
+	}
+	deepseekVerifyCtrl := controller.NewDeepseekVerifyController(sqlDB)
+
 	// 精确路径先注册，避免被 "/" 或 "/api/archive/" 抢匹配（Go 1.21 下 longest match 仍可能异常）
 	mux.HandleFunc("/api/archives/delete", launchCtrl.DeleteArchives)
 
@@ -28,6 +37,10 @@ func New(addr string) *http.Server {
 	// - /api/deepseek
 	// - /api/deepseek/
 	mux.HandleFunc("/api/deepseek", contentVerifyCtrl.ContentVerify)
+	mux.HandleFunc("/api/deepseek/", contentVerifyCtrl.ContentVerify)
+
+	mux.HandleFunc("/api/deepseek-verify", deepseekVerifyCtrl.DeepseekVerify)
+	mux.HandleFunc("/api/deepseek-verify/", deepseekVerifyCtrl.DeepseekVerify)
 
 	// API 前缀路由
 	mux.HandleFunc("/api/bootstrap/", launchCtrl.Bootstrap)
