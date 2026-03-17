@@ -365,7 +365,74 @@ curl -X DELETE http://localhost:8080/api/meili/indexes/movies/documents
 
 ---
 
-## 六、错误码
+## 六、Deepseek AI 接口
+
+### 内容验证 / 通用大模型调用
+
+后端封装了对 Deepseek `/chat/completions` 的代理接口，前端只需调用本服务即可，无需直接暴露 API Key。
+
+需在环境变量中配置（由后端读取并拼接到请求头中）：
+
+- `DEEPSEEK_ADDRESS`（例如 `https://api.deepseek.com`）
+- `DEEPSEEK_API_KEY`（用于生成 `Authorization: Bearer <DEEPSEEK_API_KEY>` 请求头）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/deepseek` | 调用 Deepseek Chat，以 JSON 结果形式返回 |
+
+**请求体**
+
+```json
+{
+  "prompt": "system prompt，用于约束模型角色与输出格式",
+  "text": "用户输入内容"
+}
+```
+
+- `prompt`：会作为 `role: "system"` 的消息传递给 Deepseek。
+- `text`：会作为 `role: "user"` 的消息传递给 Deepseek（也可传 `content`，与 `text` 二选一，优先 `text`）。
+
+内部实际请求 Deepseek 时等价于：
+
+**Headers**
+
+```http
+Authorization: Bearer <DEEPSEEK_API_KEY>
+Content-Type: application/json
+```
+
+**Body**
+
+```json
+{
+  "model": "deepseek-chat",
+  "messages": [
+    { "role": "system", "content": "<prompt>" },
+    { "role": "user", "content": "<text 或 content>" }
+  ],
+  "stream": false
+}
+```
+
+**响应**
+
+- 成功：状态码 200，Body 为 Deepseek 原始 JSON，结构示例：`id`、`object`、`model`、`choices`（其中 `choices[0].message.content` 为助手回复正文）、`usage` 等。
+- 失败：Deepseek 非 2xx 时返回 `502` 并透传错误内容；配置缺失时返回 `500`。
+
+**curl 示例**
+
+```bash
+curl -X POST http://localhost:8080/api/deepseek \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "请为我校对这段语句的错别字",
+    "text": "鸡旦灌饼是什么黑暗料理？老板怕不是把鸡蛋写成母鸡下蛋的现场了叭"
+  }'
+```
+
+---
+
+## 七、错误码
 
 | HTTP 状态 | 说明 |
 |-----------|------|
@@ -373,7 +440,7 @@ curl -X DELETE http://localhost:8080/api/meili/indexes/movies/documents
 | 400 | 参数错误（如缺少 uid、非法 name） |
 | 405 | 方法不允许（如对 bootstrap 使用 GET） |
 | 404 | 资源不存在（如 Meilisearch 路径错误） |
-| 500 | 服务端错误（如命令执行失败、Meilisearch 返回错误） |
+| 500 | 服务端错误（如命令执行失败、Meilisearch / Deepseek 调用失败等） |
 
 错误响应 body 示例：
 

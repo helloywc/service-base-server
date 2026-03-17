@@ -22,6 +22,10 @@ func LoadEnv() {
 	files = append(files, ".env")
 	if appEnv != "" {
 		files = append(files, ".env."+appEnv)
+		// 开发时常用 .env.dev，与 APP_ENV=development 兼容
+		if appEnv == "development" {
+			files = append(files, ".env.dev")
+		}
 	}
 	files = append(files, ".env.local")
 

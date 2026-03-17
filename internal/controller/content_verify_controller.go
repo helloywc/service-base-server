@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const deepseekTimeout = 10 * time.Minute
+
 type ContentVerifyController struct {
 	httpClient *http.Client
 	baseURL    string
@@ -20,10 +22,9 @@ type ContentVerifyController struct {
 func NewContentVerifyController() *ContentVerifyController {
 	baseURL := os.Getenv("DEEPSEEK_ADDRESS")
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
-
 	return &ContentVerifyController{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: deepseekTimeout,
 		},
 		baseURL: baseURL,
 		apiKey:  apiKey,
@@ -32,7 +33,8 @@ func NewContentVerifyController() *ContentVerifyController {
 
 type contentVerifyRequest struct {
 	Prompt  string `json:"prompt"`
-	Content string `json:"content"`
+	Content string `json:"content"` // 兼容原有字段
+	Text    string `json:"text"`    // 新字段名 text，推荐前端使用
 }
 
 // ContentVerify 透传前端 prompt / content 到 Deepseek /chat/completions
@@ -46,10 +48,13 @@ func (c *ContentVerifyController) ContentVerify(w http.ResponseWriter, r *http.R
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	if c.baseURL == "" || c.apiKey == "" {
 		http.Error(w, "deepseek config not set", http.StatusInternalServerError)
 		return
+	}
+	// 仅本接口放宽写超时为 10 分钟，其他接口仍为全局 15s
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Now().Add(deepseekTimeout))
 	}
 
 	var reqBody contentVerifyRequest
@@ -58,19 +63,24 @@ func (c *ContentVerifyController) ContentVerify(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if reqBody.Prompt == "" || reqBody.Content == "" {
-		http.Error(w, "prompt and content are required", http.StatusBadRequest)
+	// 兼容 content/text，两者优先级：text > content
+	userContent := reqBody.Text
+	if userContent == "" {
+		userContent = reqBody.Content
+	}
+	if reqBody.Prompt == "" || userContent == "" {
+		http.Error(w, "prompt and text/content are required", http.StatusBadRequest)
 		return
 	}
 
+	// 与外部跑通的请求体一致：仅 model、messages、stream，不强制 json_object
 	payload := map[string]any{
 		"model": "deepseek-chat",
 		"messages": []map[string]string{
 			{"role": "system", "content": reqBody.Prompt},
-			{"role": "user", "content": reqBody.Content},
+			{"role": "user", "content": userContent},
 		},
-		"response_format": map[string]string{"type": "json_object"},
-		"stream":          false,
+		"stream": false,
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -79,7 +89,7 @@ func (c *ContentVerifyController) ContentVerify(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), deepseekTimeout)
 	defer cancel()
 
 	url := c.baseURL + "/chat/completions"

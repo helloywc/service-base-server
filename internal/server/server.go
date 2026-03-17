@@ -23,8 +23,11 @@ func New(addr string) *http.Server {
 	// 通用
 	mux.HandleFunc("/health", handler.Health)
 
-	// AI 内容验证
-	mux.HandleFunc("/api/content-verify", contentVerifyCtrl.ContentVerify)
+	// AI 内容验证（Deepseek）
+	// 兼容带不带结尾斜杠的两种访问方式：
+	// - /api/deepseek
+	// - /api/deepseek/
+	mux.HandleFunc("/api/deepseek", contentVerifyCtrl.ContentVerify)
 
 	// API 前缀路由
 	mux.HandleFunc("/api/bootstrap/", launchCtrl.Bootstrap)
