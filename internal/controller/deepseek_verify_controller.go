@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -155,6 +156,19 @@ func (d *DeepseekVerifyController) getPromptByKey(key string) (string, error) {
 	return prompt, err
 }
 
+const maxRemarkLen = 512
+
+func truncateReason(s string) string {
+	if len(s) <= maxRemarkLen {
+		return s
+	}
+	return s[:maxRemarkLen]
+}
+
+func (d *DeepseekVerifyController) setVerifyFailed(videoID int64, reason string) {
+	_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2, remark = ? WHERE id = ?", truncateReason(reason), videoID)
+}
+
 // processNextOne: 取一条 bilibili_video(status=1, priority最高) 并尝试调用 DeepSeek。
 // 返回 found=false 表示已经没有可处理记录，应停止循环。
 func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, apiKey string, prompt string) (found bool, err error) {
@@ -182,7 +196,7 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 	}
 	bodyBytes, mErr := json.Marshal(payload)
 	if mErr != nil {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "failed to marshal request: "+mErr.Error())
 		return true, mErr
 	}
 
@@ -191,7 +205,7 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 
 	outReq, rErr := http.NewRequestWithContext(reqCtx, http.MethodPost, "https://api.deepseek.com/chat/completions", bytes.NewReader(bodyBytes))
 	if rErr != nil {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "failed to create upstream request: "+rErr.Error())
 		return true, rErr
 	}
 	outReq.Header.Set("Authorization", "Bearer "+apiKey)
@@ -200,37 +214,37 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 	client := &http.Client{Timeout: deepseekTimeout}
 	resp, doErr := client.Do(outReq)
 	if doErr != nil {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream request failed: "+doErr.Error())
 		return true, doErr
 	}
 	defer resp.Body.Close()
 
 	respBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream read failed: "+readErr.Error())
 		return true, readErr
 	}
 
 	logDeepseekUpstream("deepseek-verify/start", resp.StatusCode, respBody)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream returned non-2xx: "+fmt.Sprintf("%d", resp.StatusCode))
 		return true, nil
 	}
 
 	var dsResp deepseekChatCompletionResponse
 	if err := json.Unmarshal(respBody, &dsResp); err != nil || len(dsResp.Choices) == 0 {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "invalid deepseek response")
 		return true, nil
 	}
 	rawContent := dsResp.Choices[0].Message.Content
 	if rawContent == "" {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "deepseek response content is empty")
 		return true, nil
 	}
 	content, summary := parseMessageContent(rawContent)
 	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "db update failed: "+err.Error())
 		return true, err
 	}
 
@@ -326,6 +340,41 @@ func (d *DeepseekVerifyController) DeepseekVerifyStatus(w http.ResponseWriter, r
 	}
 	running, key := d.getTaskStatus()
 	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: running, Key: key})
+}
+
+// lastVerifyFailure 上一次整理失败记录（供 /api/deepseek-verify/last-failure 返回）
+type lastVerifyFailure struct {
+	ID            int64  `json:"id"`
+	VideoID       string `json:"video_id"`
+	Title         string `json:"title,omitempty"`
+	Reason        string `json:"reason"` // 失败原因，来自 remark
+	LastModifyTs  int64  `json:"last_modify_ts"`
+}
+
+// DeepseekVerifyLastFailure：查询上一次整理失败的记录及原因
+func (d *DeepseekVerifyController) DeepseekVerifyLastFailure(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if d.sqlDB == nil {
+		writeDeepseekVerifyJSON(w, 500, "database not available", nil)
+		return
+	}
+	var rec lastVerifyFailure
+	err := d.sqlDB.QueryRow(
+		"SELECT id, video_id, COALESCE(title,''), COALESCE(remark,''), last_modify_ts FROM bilibili_video WHERE status = -2 ORDER BY id DESC LIMIT 1",
+	).Scan(&rec.ID, &rec.VideoID, &rec.Title, &rec.Reason, &rec.LastModifyTs)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeDeepseekVerifyJSON(w, 200, "ok", nil)
+			return
+		}
+		log.Printf("deepseek-verify/last-failure: query error: %v", err)
+		writeDeepseekVerifyJSON(w, 500, "db error", nil)
+		return
+	}
+	writeDeepseekVerifyJSON(w, 200, "ok", rec)
 }
 
 // DeepseekVerify 仅 POST
@@ -426,7 +475,7 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 	resp, err := client.Do(outReq)
 	if err != nil {
 		log.Printf("deepseek-verify: upstream request failed: %v", err)
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream request failed: "+err.Error())
 		http.Error(w, "upstream request failed", http.StatusBadGateway)
 		return
 	}
@@ -435,7 +484,7 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("deepseek-verify: upstream read failed: %v", err)
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream read failed: "+err.Error())
 		http.Error(w, "upstream read failed", http.StatusBadGateway)
 		return
 	}
@@ -444,7 +493,7 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 
 	// 如果上游返回非 2xx，也视为失败：标记 status=-2，但仍透传上游响应
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "upstream returned non-2xx: "+fmt.Sprintf("%d", resp.StatusCode))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		_, _ = w.Write(respBody)
@@ -454,20 +503,20 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 	// 解析上游响应的 choices[0].message.content（支持 JSON {"content":"...","summary":"..."}），回写 context/summary，并标记 status=2
 	var dsResp deepseekChatCompletionResponse
 	if err := json.Unmarshal(respBody, &dsResp); err != nil || len(dsResp.Choices) == 0 {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "invalid deepseek response")
 		http.Error(w, "invalid deepseek response", http.StatusBadGateway)
 		return
 	}
 	rawContent := dsResp.Choices[0].Message.Content
 	if rawContent == "" {
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "deepseek response content is empty")
 		http.Error(w, "deepseek response content is empty", http.StatusBadGateway)
 		return
 	}
 	content, summary := parseMessageContent(rawContent)
 	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
 		log.Printf("deepseek-verify: bilibili_video update error: %v", err)
-		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
+		d.setVerifyFailed(videoID, "db update failed: "+err.Error())
 		http.Error(w, "db update failed", http.StatusInternalServerError)
 		return
 	}

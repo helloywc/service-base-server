@@ -438,9 +438,11 @@ curl -X POST http://localhost:8080/api/deepseek \
 
 - **从表 `ai_agent_text`** 读取 `key` 对应的 `content` 作为 `messages[0].content`（system）
 - **从表 `bilibili_video`** 读取 `status=1` 且 `priority` 最大的一条的 `context` 作为 `messages[1].content`（user）
-- 调用 Deepseek `https://api.deepseek.com/chat/completions`，并解析 `choices[0].message.content`
-- **成功**：将该条 `bilibili_video.context` 更新为模型返回 content，并将 `status=2`
-- **失败**：将该条 `bilibili_video.status=-2`
+- 调用 Deepseek `https://api.deepseek.com/chat/completions`，并解析 `choices[0].message.content`（支持 JSON `{"content":"...","summary":"..."}`，分别写入 `context`、`summary`）
+- **成功**：将该条 `bilibili_video.context`、`bilibili_video.summary` 更新，并将 `status=2`
+- **失败**：将该条 `bilibili_video.status=-2`，并将失败原因写入 `remark`（便于 `/api/deepseek-verify/last-failure` 查询）
+
+**start / stop / status / last-failure 统一响应体**：`code`（成功 200、失败 500）、`message`（具体信息）、`data`（业务数据，失败时可为 null）。
 
 #### 1) 启动持续校验任务 `/api/deepseek-verify/start`
 
@@ -462,8 +464,10 @@ curl -X POST http://localhost:8080/api/deepseek-verify/start \
 **响应示例**
 
 ```json
-{ "running": true, "key": "text-verify" }
+{ "code": 200, "message": "ok", "data": { "running": true, "key": "text-verify" } }
 ```
+
+（任务已在运行等失败时：`code: 500`，`message` 为具体原因，`data` 可能含当前任务状态。）
 
 #### 2) 停止持续校验任务 `/api/deepseek-verify/stop`
 
@@ -480,14 +484,14 @@ curl -X POST http://localhost:8080/api/deepseek-verify/stop
 **响应示例**
 
 ```json
-{ "running": false }
+{ "code": 200, "message": "ok", "data": { "running": false } }
 ```
 
 #### 3) 查询任务状态 `/api/deepseek-verify/status`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/deepseek-verify/status` | 查询后台持续校验任务是否运行 |
+| GET / POST | `/api/deepseek-verify/status` | 查询后台持续校验任务是否运行 |
 
 **curl**
 
@@ -498,10 +502,40 @@ curl http://localhost:8080/api/deepseek-verify/status
 **响应示例**
 
 ```json
-{ "running": true, "key": "text-verify" }
+{ "code": 200, "message": "ok", "data": { "running": true, "key": "text-verify" } }
 ```
 
-（若未运行则 `running=false`，`key` 可能为空。）
+（若未运行则 `data.running=false`，`data.key` 可能为空。）
+
+#### 4) 查询上一次整理失败原因 `/api/deepseek-verify/last-failure`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET / POST | `/api/deepseek-verify/last-failure` | 查询最近一条 `status=-2` 的整理失败记录及原因 |
+
+**curl**
+
+```bash
+curl http://localhost:8080/api/deepseek-verify/last-failure
+```
+
+**有记录时响应示例**
+
+```json
+{
+  "code": 200,
+  "message": "ok",
+  "data": {
+    "id": 123,
+    "video_id": "BV1xx411c7m1",
+    "title": "视频标题",
+    "reason": "upstream returned non-2xx: 502",
+    "last_modify_ts": 1773730752
+  }
+}
+```
+
+**无记录时**：`data` 为 `null`。数据库不可用等错误时 `code: 500`。
 
 ## 七、错误码
 

@@ -43,6 +43,7 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/api/deepseek-verify/start", deepseekVerifyCtrl.DeepseekVerifyStart)
 	mux.HandleFunc("/api/deepseek-verify/stop", deepseekVerifyCtrl.DeepseekVerifyStop)
 	mux.HandleFunc("/api/deepseek-verify/status", deepseekVerifyCtrl.DeepseekVerifyStatus)
+	mux.HandleFunc("/api/deepseek-verify/last-failure", deepseekVerifyCtrl.DeepseekVerifyLastFailure)
 
 	mux.HandleFunc("/api/deepseek-verify", deepseekVerifyCtrl.DeepseekVerify)
 	mux.HandleFunc("/api/deepseek-verify/", deepseekVerifyCtrl.DeepseekVerify)
