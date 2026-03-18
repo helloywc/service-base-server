@@ -59,6 +59,22 @@ type deepseekVerifyTaskStatusResponse struct {
 	Key     string `json:"key,omitempty"`
 }
 
+type deepseekVerifyAPIResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+func writeDeepseekVerifyJSON(w http.ResponseWriter, code int, message string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(deepseekVerifyAPIResponse{
+		Code:    code,
+		Message: message,
+		Data:    data,
+	})
+}
+
 // 模型返回的 message.content 可能是 JSON：{"content":"...", "summary":"..."}
 type deepseekMessageContent struct {
 	Content string `json:"content"`
@@ -228,23 +244,23 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 		return
 	}
 	if d.sqlDB == nil {
-		http.Error(w, "database not available", http.StatusServiceUnavailable)
+		writeDeepseekVerifyJSON(w, 500, "database not available", nil)
 		return
 	}
 
 	var req deepseekVerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json body", http.StatusBadRequest)
+		writeDeepseekVerifyJSON(w, 500, "invalid json body", nil)
 		return
 	}
 	if req.Key == "" {
-		http.Error(w, "key is required", http.StatusBadRequest)
+		writeDeepseekVerifyJSON(w, 500, "key is required", nil)
 		return
 	}
 
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
-		http.Error(w, "DEEPSEEK_API_KEY is not set", http.StatusServiceUnavailable)
+		writeDeepseekVerifyJSON(w, 500, "DEEPSEEK_API_KEY is not set", nil)
 		return
 	}
 
@@ -252,9 +268,7 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 	if d.running {
 		key := d.key
 		d.mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(deepseekVerifyTaskStatusResponse{Running: true, Key: key})
+		writeDeepseekVerifyJSON(w, 500, "task already running", deepseekVerifyTaskStatusResponse{Running: true, Key: key})
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -291,9 +305,7 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 		}
 	}(req.Key)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(deepseekVerifyTaskStatusResponse{Running: true, Key: req.Key})
+	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: true, Key: req.Key})
 }
 
 // DeepseekVerifyStop：终止后台任务
@@ -303,9 +315,7 @@ func (d *DeepseekVerifyController) DeepseekVerifyStop(w http.ResponseWriter, r *
 		return
 	}
 	_ = d.stopTask()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(deepseekVerifyTaskStatusResponse{Running: false})
+	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: false})
 }
 
 // DeepseekVerifyStatus：查询后台任务状态
@@ -315,9 +325,7 @@ func (d *DeepseekVerifyController) DeepseekVerifyStatus(w http.ResponseWriter, r
 		return
 	}
 	running, key := d.getTaskStatus()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(deepseekVerifyTaskStatusResponse{Running: running, Key: key})
+	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: running, Key: key})
 }
 
 // DeepseekVerify 仅 POST
