@@ -59,6 +59,34 @@ type deepseekVerifyTaskStatusResponse struct {
 	Key     string `json:"key,omitempty"`
 }
 
+// 模型返回的 message.content 可能是 JSON：{"content":"...", "summary":"..."}
+type deepseekMessageContent struct {
+	Content string `json:"content"`
+	Summary string `json:"summary"`
+}
+
+// parseMessageContent 解析 choices[0].message.content：若为 JSON 则拆成 content/summary，否则整段作为 content。
+func parseMessageContent(raw string) (content, summary string) {
+	content = raw
+	if raw == "" {
+		return "", ""
+	}
+	var parsed deepseekMessageContent
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return content, ""
+	}
+	if parsed.Content != "" {
+		content = parsed.Content
+	}
+	// summary 表字段为 VARCHAR(255)
+	if len(parsed.Summary) > 255 {
+		summary = parsed.Summary[:255]
+	} else {
+		summary = parsed.Summary
+	}
+	return content, summary
+}
+
 func truncateForLog(s string, max int) string {
 	if max <= 0 {
 		return ""
@@ -179,12 +207,13 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		return true, nil
 	}
-	newCtx := dsResp.Choices[0].Message.Content
-	if newCtx == "" {
+	rawContent := dsResp.Choices[0].Message.Content
+	if rawContent == "" {
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		return true, nil
 	}
-	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, status = 2 WHERE id = ?", newCtx, videoID); err != nil {
+	content, summary := parseMessageContent(rawContent)
+	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		return true, err
 	}
@@ -414,20 +443,21 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 解析上游响应的 choices[0].message.content，并回写到 bilibili_video.context，同时标记 status=2
+	// 解析上游响应的 choices[0].message.content（支持 JSON {"content":"...","summary":"..."}），回写 context/summary，并标记 status=2
 	var dsResp deepseekChatCompletionResponse
 	if err := json.Unmarshal(respBody, &dsResp); err != nil || len(dsResp.Choices) == 0 {
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		http.Error(w, "invalid deepseek response", http.StatusBadGateway)
 		return
 	}
-	newCtx := dsResp.Choices[0].Message.Content
-	if newCtx == "" {
+	rawContent := dsResp.Choices[0].Message.Content
+	if rawContent == "" {
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		http.Error(w, "deepseek response content is empty", http.StatusBadGateway)
 		return
 	}
-	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, status = 2 WHERE id = ?", newCtx, videoID); err != nil {
+	content, summary := parseMessageContent(rawContent)
+	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
 		log.Printf("deepseek-verify: bilibili_video update error: %v", err)
 		_, _ = d.sqlDB.Exec("UPDATE bilibili_video SET status = -2 WHERE id = ?", videoID)
 		http.Error(w, "db update failed", http.StatusInternalServerError)
