@@ -57,8 +57,11 @@ func New(addr string) *http.Server {
 
 	// Meilisearch 索引与文档增删改查（环境变量 MEILISEARCH_HOST、MEILISEARCH_API_KEY）
 	meiliClient := meili.NewClient()
-	meiliCtrl := controller.NewMeiliController(meiliClient)
+	meiliCtrl := controller.NewMeiliController(meiliClient, sqlDB)
 	mux.HandleFunc("/api/meili/", meiliCtrl.MeiliDispatch)
+
+	// Meilisearch 同步（使用 .env.dev 的 BASE_DB_MEILISEARCH_* 配置）
+	mux.HandleFunc("/api/meilisearch/start", meiliCtrl.MeilisearchStart)
 
 	// 兜底放最后
 	mux.HandleFunc("/", handler.Home)

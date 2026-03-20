@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"net/http"
 	"os"
+	"strings"
 )
 
 const (
@@ -36,6 +38,43 @@ func NewClient() *Client {
 		apiKey: key,
 		http:   &http.Client{},
 	}
+}
+
+// NewClientWithHostKey 创建自定义连接（便于从其他 env 变量读取）
+func NewClientWithHostKey(host, key string) *Client {
+	if host == "" {
+		host = "http://localhost:7700"
+	}
+	if key == "" {
+		key = "123456"
+	}
+	return &Client{
+		host:   host,
+		apiKey: key,
+		http:   &http.Client{},
+	}
+}
+
+// NewClientFromBaseEnv 从 .env.dev 的 BASE_DB_MEILISEARCH_* 变量读取连接配置
+func NewClientFromBaseEnv() *Client {
+	baseURL := os.Getenv("BASE_DB_MEILISEARCH_URL")
+	basePort := os.Getenv("BASE_DB_MEILISEARCH_PORT")
+	baseKey := os.Getenv("BASE_DB_MEILISEARCH_MASTER_KEY")
+	if baseURL == "" {
+		// 回退到原逻辑（MEILISEARCH_HOST/MEILISEARCH_API_KEY）
+		return NewClient()
+	}
+
+	host := strings.TrimRight(baseURL, "/")
+	if basePort != "" {
+		if u, err := url.Parse(host); err == nil && u.Scheme != "" {
+			u.Host = u.Hostname() + ":" + basePort
+			host = u.String()
+		} else {
+			host = host + ":" + basePort
+		}
+	}
+	return NewClientWithHostKey(host, baseKey)
 }
 
 func (c *Client) do(method, path string, body any) ([]byte, int, error) {

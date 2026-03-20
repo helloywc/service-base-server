@@ -2,7 +2,10 @@ package controller
 
 import (
 	"encoding/json"
+	"database/sql"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"code-server/internal/meili"
@@ -12,11 +15,14 @@ import (
 // MeiliController Meilisearch 索引与文档的增删改查
 type MeiliController struct {
 	client *meili.Client
+
+	// 用于 /api/meilisearch/start：从 MySQL 拉数据再写入 Meilisearch
+	sqlDB *sql.DB
 }
 
 // NewMeiliController 创建控制器
-func NewMeiliController(client *meili.Client) *MeiliController {
-	return &MeiliController{client: client}
+func NewMeiliController(client *meili.Client, sqlDB *sql.DB) *MeiliController {
+	return &MeiliController{client: client, sqlDB: sqlDB}
 }
 
 func (c *MeiliController) writeJSON(w http.ResponseWriter, status int, v any) {
@@ -217,6 +223,168 @@ func parseInt(s string) (int, bool) {
 		n = n*10 + int(c-'0')
 	}
 	return n, true
+}
+
+type meiliSearchStartRequest struct {
+	Tabel string `json:"tabel"` // 按你提供的字段名（tabel）
+	Table string `json:"table"` // 兼容 table
+}
+
+type meiliSearchStartResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+func (c *MeiliController) writeStartJSON(w http.ResponseWriter, code int, message string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(meiliSearchStartResponse{Code: code, Message: message, Data: data})
+}
+
+// MeilisearchStart 同步 MySQL 数据到 Meilisearch（仅 POST）
+// POST /api/meilisearch/start
+// body: {"tabel":"bilibili_video"}
+func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if c.sqlDB == nil {
+		c.writeStartJSON(w, 500, "database not available", nil)
+		return
+	}
+
+	var req meiliSearchStartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.writeStartJSON(w, 500, "invalid json body", nil)
+		return
+	}
+	table := strings.TrimSpace(req.Table)
+	if table == "" {
+		table = strings.TrimSpace(req.Tabel)
+	}
+	if table == "" {
+		c.writeStartJSON(w, 500, "table is required", nil)
+		return
+	}
+
+	meiliClient := meili.NewClientFromBaseEnv()
+	indexUID := strings.TrimSpace(os.Getenv("BASE_DB_MEILISEARCH_INDEX"))
+	if indexUID == "" {
+		indexUID = "media"
+	}
+
+	// 确保索引存在（primaryKey = id）
+	_, status, err := meiliClient.IndexGet(indexUID)
+	if err != nil && status == http.StatusNotFound {
+		_, _, cErr := meiliClient.IndexCreate(indexUID, "id")
+		if cErr != nil {
+			c.writeStartJSON(w, 500, "meilisearch index create failed: "+cErr.Error(), nil)
+			return
+		}
+	} else if err != nil {
+		c.writeStartJSON(w, 500, "meilisearch index get failed: "+err.Error(), nil)
+		return
+	}
+
+	const batchSize = 50
+	switch table {
+	case "bilibili_video":
+		// 仅同步 status=2 的记录
+		rows, qErr := c.sqlDB.Query(
+			"SELECT id, COALESCE(video_id,''), COALESCE(title,''), COALESCE(context,''), COALESCE(summary,''), COALESCE(remark,'') "+
+				"FROM bilibili_video WHERE is_deleted = 0 AND status = 2 "+
+				"ORDER BY id DESC LIMIT ?",
+			batchSize,
+		)
+		if qErr != nil {
+			c.writeStartJSON(w, 500, "mysql query failed: "+qErr.Error(), nil)
+			return
+		}
+		defer rows.Close()
+
+		type row struct {
+			id       int64
+			videoID  string
+			title    string
+			context  string
+			summary  string
+			remark   string
+		}
+
+		var docs []map[string]interface{}
+		var mysqlIDs []int64
+		for rows.Next() {
+			var rr row
+			if scanErr := rows.Scan(&rr.id, &rr.videoID, &rr.title, &rr.context, &rr.summary, &rr.remark); scanErr != nil {
+				c.writeStartJSON(w, 500, "mysql scan failed: "+scanErr.Error(), nil)
+				return
+			}
+			// 与索引字段定义一致：id 使用 bilibili_video_<mysql_id>
+			docID := fmt.Sprintf("bilibili_video_%d", rr.id)
+			mysqlIDs = append(mysqlIDs, rr.id)
+			docs = append(docs, map[string]interface{}{
+				"id":      docID,
+				"key":     rr.videoID,
+				"title":   rr.title,
+				"content": rr.context,
+				"summary": rr.summary,
+				"remark":  rr.remark,
+				"status":  1,
+			})
+		}
+		if err := rows.Err(); err != nil {
+			c.writeStartJSON(w, 500, "mysql rows error: "+err.Error(), nil)
+			return
+		}
+
+		if len(docs) == 0 {
+			c.writeStartJSON(w, 200, "no records to sync", map[string]any{"synced": 0})
+			return
+		}
+
+		_, meiliStatus, meiliErr := meiliClient.DocAdd(indexUID, docs)
+		if meiliErr != nil {
+			// 写入失败：将这批记录标记为失败（status=-3）
+			if len(mysqlIDs) > 0 {
+				placeholders := make([]string, 0, len(mysqlIDs))
+				args := make([]any, 0, len(mysqlIDs))
+				for _, id := range mysqlIDs {
+					placeholders = append(placeholders, "?")
+					args = append(args, id)
+				}
+				query := fmt.Sprintf("UPDATE bilibili_video SET status = -3 WHERE id IN (%s)", strings.Join(placeholders, ","))
+				_, _ = c.sqlDB.Exec(query, args...)
+			}
+			c.writeStartJSON(w, 500, fmt.Sprintf("meilisearch doc add failed (status=%d): %v", meiliStatus, meiliErr), nil)
+			return
+		}
+
+		// 写入成功：标记为已同步（status=3）
+		if len(mysqlIDs) > 0 {
+			placeholders := make([]string, 0, len(mysqlIDs))
+			args := make([]any, 0, len(mysqlIDs))
+			for _, id := range mysqlIDs {
+				placeholders = append(placeholders, "?")
+				args = append(args, id)
+			}
+			query := fmt.Sprintf("UPDATE bilibili_video SET status = 3 WHERE id IN (%s)", strings.Join(placeholders, ","))
+			_, _ = c.sqlDB.Exec(query, args...)
+		}
+
+		c.writeStartJSON(w, 200, "ok", map[string]any{
+			"synced":   len(docs),
+			"index":    indexUID,
+			"table":    table,
+			"batch":    batchSize,
+			"doc_added": "PUT /indexes/:uid/documents",
+		})
+		return
+	default:
+		c.writeStartJSON(w, 500, "unsupported table: "+table, map[string]any{"supported": []string{"bilibili_video"}})
+		return
+	}
 }
 
 // MeiliDispatch 统一入口：根据路径和方法分发到对应 handler，注册在 /api/meili/
