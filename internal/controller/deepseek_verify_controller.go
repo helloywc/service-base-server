@@ -18,10 +18,11 @@ import (
 type DeepseekVerifyController struct {
 	sqlDB *sql.DB
 
-	mu      sync.Mutex
-	running bool
-	cancel  context.CancelFunc
-	key     string
+	mu             sync.Mutex
+	running        bool
+	cancel         context.CancelFunc
+	key            string
+	currentVideoID int64 // 当前正在处理的一条记录 id，停止任务时用于写入失败原因
 }
 
 // NewDeepseekVerifyController 依赖 MySQL 连接池，sqlDB 可为 nil（接口返回 503）
@@ -133,18 +134,32 @@ func (d *DeepseekVerifyController) setTask(running bool, key string, cancel cont
 	d.cancel = cancel
 }
 
-func (d *DeepseekVerifyController) stopTask() (wasRunning bool) {
+func (d *DeepseekVerifyController) getCurrentVideoID() int64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.currentVideoID
+}
+
+func (d *DeepseekVerifyController) setCurrentVideoID(videoID int64) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.currentVideoID = videoID
+}
+
+func (d *DeepseekVerifyController) stopTask() (wasRunning bool, videoID int64) {
 	d.mu.Lock()
 	cancel := d.cancel
 	wasRunning = d.running
+	videoID = d.currentVideoID
 	d.running = false
 	d.key = ""
 	d.cancel = nil
+	d.currentVideoID = 0
 	d.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
-	return wasRunning
+	return wasRunning, videoID
 }
 
 func (d *DeepseekVerifyController) getPromptByKey(key string) (string, error) {
@@ -185,6 +200,8 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 		}
 		return true, qErr
 	}
+	d.setCurrentVideoID(videoID)
+	defer d.setCurrentVideoID(0)
 
 	payload := deepseekChatCompletionRequest{
 		Model: "deepseek-chat",
@@ -322,13 +339,16 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: true, Key: req.Key})
 }
 
-// DeepseekVerifyStop：终止后台任务
+// DeepseekVerifyStop：终止后台任务；若当前有正在处理的记录，将其标记为失败并在 remark 写入原因
 func (d *DeepseekVerifyController) DeepseekVerifyStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	_ = d.stopTask()
+	_, videoID := d.stopTask()
+	if videoID != 0 && d.sqlDB != nil {
+		d.setVerifyFailed(videoID, "任务已由用户停止")
+	}
 	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: false})
 }
 
