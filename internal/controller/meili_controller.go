@@ -293,7 +293,7 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 	case "bilibili_video":
 		// 仅同步 status=2 的记录
 		rows, qErr := c.sqlDB.Query(
-			"SELECT id, COALESCE(video_id,''), COALESCE(title,''), COALESCE(context,''), COALESCE(summary,''), COALESCE(remark,'') "+
+			"SELECT id, COALESCE(video_id,''), COALESCE(title,''), COALESCE(context,''), COALESCE(summary,''), COALESCE(keywords,''), COALESCE(remark,'') "+
 				"FROM bilibili_video WHERE is_deleted = 0 AND status = 2 "+
 				"ORDER BY id DESC LIMIT ?",
 			batchSize,
@@ -310,6 +310,7 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 			title    string
 			context  string
 			summary  string
+			keywords string
 			remark   string
 		}
 
@@ -317,7 +318,7 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 		var mysqlIDs []int64
 		for rows.Next() {
 			var rr row
-			if scanErr := rows.Scan(&rr.id, &rr.videoID, &rr.title, &rr.context, &rr.summary, &rr.remark); scanErr != nil {
+			if scanErr := rows.Scan(&rr.id, &rr.videoID, &rr.title, &rr.context, &rr.summary, &rr.keywords, &rr.remark); scanErr != nil {
 				c.writeStartJSON(w, 500, "mysql scan failed: "+scanErr.Error(), nil)
 				return
 			}
@@ -330,6 +331,7 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 				"title":   rr.title,
 				"content": rr.context,
 				"summary": rr.summary,
+				"keywords": rr.keywords,
 				"remark":  rr.remark,
 				"status":  1,
 			})

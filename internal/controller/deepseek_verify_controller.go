@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -57,8 +58,10 @@ type deepseekChatCompletionResponse struct {
 }
 
 type deepseekVerifyTaskStatusResponse struct {
-	Running bool   `json:"running"`
-	Key     string `json:"key,omitempty"`
+	Running        bool   `json:"running"`
+	Key            string `json:"key,omitempty"`
+	WasRunning     *bool  `json:"was_running,omitempty"`      // stop：调用前是否在运行
+	StoppedVideoID int64  `json:"stopped_video_id,omitempty"` // stop：被中止时正在处理的 bilibili_video.id
 }
 
 type deepseekVerifyAPIResponse struct {
@@ -79,19 +82,20 @@ func writeDeepseekVerifyJSON(w http.ResponseWriter, code int, message string, da
 
 // 模型返回的 message.content 可能是 JSON：{"content":"...", "summary":"..."}
 type deepseekMessageContent struct {
-	Content string `json:"content"`
-	Summary string `json:"summary"`
+	Content  string          `json:"content"`
+	Summary  string          `json:"summary"`
+	Keywords json.RawMessage `json:"keywords"`
 }
 
 // parseMessageContent 解析 choices[0].message.content：若为 JSON 则拆成 content/summary，否则整段作为 content。
-func parseMessageContent(raw string) (content, summary string) {
+func parseMessageContent(raw string) (content, summary, keywords string) {
 	content = raw
 	if raw == "" {
-		return "", ""
+		return "", "", ""
 	}
 	var parsed deepseekMessageContent
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return content, ""
+		return content, "", ""
 	}
 	if parsed.Content != "" {
 		content = parsed.Content
@@ -102,7 +106,42 @@ func parseMessageContent(raw string) (content, summary string) {
 	} else {
 		summary = parsed.Summary
 	}
-	return content, summary
+	keywords = normalizeKeywords(parsed.Keywords)
+	return content, summary, keywords
+}
+
+func normalizeKeywords(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return ""
+	}
+
+	var asString string
+	if err := json.Unmarshal(trimmed, &asString); err == nil {
+		return truncateKeywords(asString)
+	}
+
+	var asArray []string
+	if err := json.Unmarshal(trimmed, &asArray); err == nil {
+		if len(asArray) == 0 {
+			return ""
+		}
+		return truncateKeywords(strings.Join(asArray, ","))
+	}
+
+	return truncateKeywords(string(trimmed))
+}
+
+func truncateKeywords(s string) string {
+	// keywords 表字段为 VARCHAR(255)
+	if len(s) > 255 {
+		return s[:255]
+	}
+	return s
 }
 
 func truncateForLog(s string, max int) string {
@@ -259,8 +298,8 @@ func (d *DeepseekVerifyController) processNextOne(parentCtx context.Context, api
 		d.setVerifyFailed(videoID, "deepseek response content is empty")
 		return true, nil
 	}
-	content, summary := parseMessageContent(rawContent)
-	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
+	content, summary, keywords := parseMessageContent(rawContent)
+	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, keywords = ?, status = 2 WHERE id = ?", content, summary, keywords, videoID); err != nil {
 		d.setVerifyFailed(videoID, "db update failed: "+err.Error())
 		return true, err
 	}
@@ -299,7 +338,8 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 	if d.running {
 		key := d.key
 		d.mu.Unlock()
-		writeDeepseekVerifyJSON(w, 500, "task already running", deepseekVerifyTaskStatusResponse{Running: true, Key: key})
+		data := deepseekVerifyTaskStatusResponse{Running: true, Key: key}
+		writeDeepseekVerifyJSON(w, 500, fmt.Sprintf("已有任务在运行，当前 key=%s", key), data)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -336,7 +376,8 @@ func (d *DeepseekVerifyController) DeepseekVerifyStart(w http.ResponseWriter, r 
 		}
 	}(req.Key)
 
-	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: true, Key: req.Key})
+	data := deepseekVerifyTaskStatusResponse{Running: true, Key: req.Key}
+	writeDeepseekVerifyJSON(w, 200, fmt.Sprintf("后台校验任务已启动，key=%s，运行中 running=true", req.Key), data)
 }
 
 // DeepseekVerifyStop：终止后台任务；若当前有正在处理的记录，将其标记为失败并在 remark 写入原因
@@ -345,11 +386,26 @@ func (d *DeepseekVerifyController) DeepseekVerifyStop(w http.ResponseWriter, r *
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	_, videoID := d.stopTask()
+	wasRunning, videoID := d.stopTask()
 	if videoID != 0 && d.sqlDB != nil {
 		d.setVerifyFailed(videoID, "任务已由用户停止")
 	}
-	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: false})
+	wr := wasRunning
+	data := deepseekVerifyTaskStatusResponse{
+		Running:        false,
+		WasRunning:     &wr,
+		StoppedVideoID: videoID,
+	}
+	var msg string
+	switch {
+	case wasRunning && videoID != 0:
+		msg = fmt.Sprintf("后台任务已停止，此前正在处理 bilibili_video.id=%d，已标记为整理失败", videoID)
+	case wasRunning:
+		msg = "后台任务已停止（此前无正在处理的单条记录）"
+	default:
+		msg = "当前没有运行中的后台任务，无需停止"
+	}
+	writeDeepseekVerifyJSON(w, 200, msg, data)
 }
 
 // DeepseekVerifyStatus：查询后台任务状态
@@ -359,7 +415,18 @@ func (d *DeepseekVerifyController) DeepseekVerifyStatus(w http.ResponseWriter, r
 		return
 	}
 	running, key := d.getTaskStatus()
-	writeDeepseekVerifyJSON(w, 200, "ok", deepseekVerifyTaskStatusResponse{Running: running, Key: key})
+	data := deepseekVerifyTaskStatusResponse{Running: running, Key: key}
+	var msg string
+	if running {
+		if key != "" {
+			msg = fmt.Sprintf("任务运行中，running=true，key=%s", key)
+		} else {
+			msg = "任务运行中，running=true"
+		}
+	} else {
+		msg = "任务未运行，running=false"
+	}
+	writeDeepseekVerifyJSON(w, 200, msg, data)
 }
 
 // lastVerifyFailure 上一次整理失败记录（供 /api/deepseek-verify/last-failure 返回）
@@ -533,8 +600,8 @@ func (d *DeepseekVerifyController) DeepseekVerify(w http.ResponseWriter, r *http
 		http.Error(w, "deepseek response content is empty", http.StatusBadGateway)
 		return
 	}
-	content, summary := parseMessageContent(rawContent)
-	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, status = 2 WHERE id = ?", content, summary, videoID); err != nil {
+	content, summary, keywords := parseMessageContent(rawContent)
+	if _, err := d.sqlDB.Exec("UPDATE bilibili_video SET context = ?, summary = ?, keywords = ?, status = 2 WHERE id = ?", content, summary, keywords, videoID); err != nil {
 		log.Printf("deepseek-verify: bilibili_video update error: %v", err)
 		d.setVerifyFailed(videoID, "db update failed: "+err.Error())
 		http.Error(w, "db update failed", http.StatusInternalServerError)
