@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.code-server</string>
+
+	<!-- 按实际路径修改：项目根目录（含 Makefile、.env*） -->
+	<key>WorkingDirectory</key>
+	<string>/Users/you/code-server</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/make</string>
+		<string>-C</string>
+		<string>/Users/you/code-server</string>
+		<string>prod</string>
+	</array>
+
+	<!-- 端口/监听在此设置，勿把 KEY=value 当作 make 的第三个参数（会被当成 target） -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>HTTP_ADDR</key>
+		<string>0.0.0.0:8090</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/Users/you/Logs/code-server/stdout.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/you/Logs/code-server/stderr.log</string>
+</dict>
+</plist>

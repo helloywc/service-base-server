@@ -13,7 +13,8 @@ import (
 )
 
 // New 创建并返回配置好的 HTTP 服务器（兼容 Go 1.21：用路径前缀匹配）
-func New(addr string) *http.Server {
+// listenAddr 为完整监听地址，例如 ":8080"、"0.0.0.0:8090"（由 main 中 HTTP_ADDR / PORT+HOST 解析）。
+func New(listenAddr string) *http.Server {
 	mux := http.NewServeMux()
 	launchSvc := service.NewLaunchCtl()
 	launchCtrl := controller.NewLaunchController(launchSvc)
@@ -73,7 +74,7 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/", handler.Home)
 
 	return &http.Server{
-		Addr:         ":" + addr,
+		Addr:         listenAddr,
 		Handler:      corsHandler(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,

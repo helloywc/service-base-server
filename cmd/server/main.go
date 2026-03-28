@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,24 +50,12 @@ func envOrUnknown(s string) string {
 func main() {
 	config.LoadEnv() // 加载 .env / .env.{APP_ENV} / .env.local（类似 Node dotenv）
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		switch appEnv() {
-		case "production":
-			port = "8090"
-		case "test":
-			port = "8080"
-		case "development":
-			port = "8080"
-		default:
-			port = "8080"
-		}
-	}
+	listenAddr := resolveListenAddr()
 
-	srv := server.New(port)
+	srv := server.New(listenAddr)
 
 	go func() {
-		log.Printf("Server listening on :%s (APP_ENV=%s)", port, envOrUnknown(appEnv()))
+		log.Printf("Server listening on %s (APP_ENV=%s)", listenAddr, envOrUnknown(appEnv()))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
@@ -84,4 +73,33 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 	log.Println("Server exited")
+}
+
+// resolveListenAddr 解析顺序：
+//  1. HTTP_ADDR 或 LISTEN_ADDR — 完整地址，如 0.0.0.0:8090（launchd / plist 推荐）
+//  2. HOST + PORT — HOST 未设时仍用 ":PORT"（与原先仅 PORT 行为一致）
+func resolveListenAddr() string {
+	if a := strings.TrimSpace(os.Getenv("HTTP_ADDR")); a != "" {
+		return a
+	}
+	if a := strings.TrimSpace(os.Getenv("LISTEN_ADDR")); a != "" {
+		return a
+	}
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		switch appEnv() {
+		case "production":
+			port = "8090"
+		case "test":
+			port = "8080"
+		case "development":
+			port = "8080"
+		default:
+			port = "8080"
+		}
+	}
+	if host := strings.TrimSpace(os.Getenv("HOST")); host != "" {
+		return net.JoinHostPort(host, port)
+	}
+	return ":" + port
 }

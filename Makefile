@@ -1,5 +1,8 @@
 .PHONY: help env-init dev test-env prod run start port build-dev build-test build-prod clean
 
+# 命令行传入的监听变量会传给 go run：make prod HTTP_ADDR=0.0.0.0:8090
+export HTTP_ADDR LISTEN_ADDR HOST PORT
+
 # 与 internal/config/env.go 一致：
 #   .env → .env.development | .env.test | .env.production（由 APP_ENV 决定）→ .env.local
 # 后加载文件中的同名键会覆盖先加载文件（进程启动前已存在的环境变量不会被覆盖）
