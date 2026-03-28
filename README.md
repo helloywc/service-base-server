@@ -30,26 +30,26 @@
 
 支持用 **`.env`** 配置（类似 Node.js 的 dotenv），启动时自动加载项目根目录下的：
 
-1. **`.env`** — 默认配置（已有环境变量不覆盖）
-2. **`.env.{APP_ENV}`** — 如 `.env.prod`，按环境覆盖
-3. **`.env.local`** — 本地覆盖，建议加入 `.gitignore`
+1. **`.env`** — 全环境通用基线（进程里已存在的环境变量不会被文件覆盖）
+2. **`.env.development` / `.env.test` / `.env.production`** — 由 `APP_ENV` 决定加载哪一个（未设置 `APP_ENV` 时默认按 `development` 加载 `.env.development`）
+3. **`.env.local`** — 本机最后覆盖（可选，勿提交）
 
 ```bash
-# 复制示例后按需修改
-cp .env.example .env
+make env-init          # 从 .env*.example 生成缺失文件
+cp .env.example .env   # 若尚未创建基线
 
-# 开发环境（默认）：端口 8080
-go run ./cmd/server
-# 或
+# 开发：显式设置 APP_ENV 后启动（端口默认 8080）
 make dev
-
-# 生产环境：端口 8090（或 .env 里设 APP_ENV=prod）
-APP_ENV=prod go run ./cmd/server
 # 或
+APP_ENV=development go run ./cmd/server
+
+# 测试 / 生产
+make test-env
 make prod
+# 或 APP_ENV=test / APP_ENV=production go run ./cmd/server
 ```
 
-`.env` 中设置 `APP_ENV=development` 或 `APP_ENV=prod`，会加载 `.env.development` 或 `.env.prod`。
+`.env` 中可写 `APP_ENV=development`（或 `test` / `production`），以便只执行 `go run ./cmd/server` 时也能加载对应环境文件。
 
 也可直接使用环境变量，优先级高于 `.env`：
 
@@ -61,7 +61,7 @@ PORT=3000 go run ./cmd/server
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `APP_ENV` | `development` → 8080，`prod` → 8090 | `development`（8080） |
+| `APP_ENV` | `development`/`test` → 8080，`production` → 8090 | `development`（8080） |
 | `PORT` | 监听端口，设置时优先于 `APP_ENV` | 见上 |
 | `MEILISEARCH_HOST` | Meilisearch 地址 | `http://localhost:7700` |
 | `MEILISEARCH_API_KEY` | Meilisearch API Key | `123456` |

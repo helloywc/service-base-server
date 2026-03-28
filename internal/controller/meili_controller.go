@@ -1,11 +1,13 @@
 package controller
 
 import (
-	"encoding/json"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"code-server/internal/meili"
@@ -225,9 +227,120 @@ func parseInt(s string) (int, bool) {
 	return n, true
 }
 
+func buildInPlaceholdersUint64(ids []uint64) (string, []any) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		ph[i] = "?"
+		args[i] = id
+	}
+	return strings.Join(ph, ","), args
+}
+
+// loadMediaListEnrichment 批量拉取 media_list 名称，及 rel_media_* 关联得到的逗号分隔类型名、标签名
+func (c *MeiliController) loadMediaListEnrichment(mediaIDs []uint64) (names, categoryNames, tagNames map[uint64]string, err error) {
+	names = make(map[uint64]string)
+	categoryNames = make(map[uint64]string)
+	tagNames = make(map[uint64]string)
+	if len(mediaIDs) == 0 {
+		return names, categoryNames, tagNames, nil
+	}
+	placeholders, args := buildInPlaceholdersUint64(mediaIDs)
+
+	{
+		q := fmt.Sprintf("SELECT id, COALESCE(media_name,'') FROM media_list WHERE is_deleted = 0 AND id IN (%s)", placeholders)
+		rows, qErr := c.sqlDB.Query(q, args...)
+		if qErr != nil {
+			return nil, nil, nil, qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id uint64
+			var name string
+			if scanErr := rows.Scan(&id, &name); scanErr != nil {
+				return nil, nil, nil, scanErr
+			}
+			names[id] = name
+		}
+		if err := rows.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	{
+		q := fmt.Sprintf(`
+SELECT r.media_id, GROUP_CONCAT(DISTINCT mc.category_name ORDER BY mc.id SEPARATOR ',')
+FROM rel_media_category r
+INNER JOIN media_category mc ON mc.id = r.category_id AND mc.is_deleted = 0
+WHERE r.is_deleted = 0 AND r.media_id IN (%s)
+GROUP BY r.media_id`, placeholders)
+		rows, qErr := c.sqlDB.Query(q, args...)
+		if qErr != nil {
+			return nil, nil, nil, qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var mid uint64
+			var list sql.NullString
+			if scanErr := rows.Scan(&mid, &list); scanErr != nil {
+				return nil, nil, nil, scanErr
+			}
+			if list.Valid {
+				categoryNames[mid] = list.String
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	{
+		q := fmt.Sprintf(`
+SELECT r.media_id, GROUP_CONCAT(DISTINCT mt.tag_name ORDER BY mt.id SEPARATOR ',')
+FROM rel_media_tag r
+INNER JOIN media_tag mt ON mt.id = r.tag_id AND mt.is_deleted = 0
+WHERE r.is_deleted = 0 AND r.media_id IN (%s)
+GROUP BY r.media_id`, placeholders)
+		rows, qErr := c.sqlDB.Query(q, args...)
+		if qErr != nil {
+			return nil, nil, nil, qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var mid uint64
+			var list sql.NullString
+			if scanErr := rows.Scan(&mid, &list); scanErr != nil {
+				return nil, nil, nil, scanErr
+			}
+			if list.Valid {
+				tagNames[mid] = list.String
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	return names, categoryNames, tagNames, nil
+}
+
 type meiliSearchStartRequest struct {
 	Tabel string `json:"tabel"` // 按你提供的字段名（tabel）
 	Table string `json:"table"` // 兼容 table
+}
+
+type meiliSearchProxyRequest struct {
+	Q       string   `json:"q"`
+	Limit   int      `json:"limit"`
+	Offset  int      `json:"offset"`
+	Index   string   `json:"index,omitempty"`
+	IDs     []string `json:"ids,omitempty"`
+	IDsCSV  string   `json:"ids_csv,omitempty"`
+	// 兼容旧前端：仍然允许传 filter，如 filter = "id = \"a, b, c\""
+	Filter  string   `json:"filter,omitempty"`
 }
 
 type meiliSearchStartResponse struct {
@@ -288,12 +401,25 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// 让 `id` 支持过滤：否则使用 filter="id = ..." 会报 invalid_search_filter
+	// 说明：primaryKey 不一定自动等价为 filterableAttributes。
+	if _, updStatus, updErr := meiliClient.IndexUpdate(indexUID, map[string]any{
+		"filterableAttributes": []string{"id"},
+	}); updErr != nil {
+		c.writeStartJSON(w, 500, "meilisearch index update failed: "+updErr.Error(), map[string]any{
+			"status": updStatus,
+			"index":  indexUID,
+		})
+		return
+	}
+
 	const batchSize = 50
 	switch table {
 	case "bilibili_video":
 		// 仅同步 status=2 的记录
 		rows, qErr := c.sqlDB.Query(
-			"SELECT id, COALESCE(video_id,''), COALESCE(title,''), COALESCE(context,''), COALESCE(summary,''), COALESCE(keywords,''), COALESCE(remark,'') "+
+			"SELECT id, COALESCE(video_id,''), COALESCE(title,''), COALESCE(context,''), COALESCE(summary,''), COALESCE(keywords,''), COALESCE(remark,''), "+
+				"COALESCE(media_id,''), COALESCE(categories,''), COALESCE(tags,'') "+
 				"FROM bilibili_video WHERE is_deleted = 0 AND status = 2 "+
 				"ORDER BY id DESC LIMIT ?",
 			batchSize,
@@ -304,41 +430,83 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 		}
 		defer rows.Close()
 
-		type row struct {
-			id       int64
-			videoID  string
-			title    string
-			context  string
-			summary  string
-			keywords string
-			remark   string
+		type bvRow struct {
+			id         int64
+			videoID    string
+			title      string
+			context    string
+			summary    string
+			keywords   string
+			remark     string
+			mediaIDStr string
+			categories string
+			tags       string
 		}
 
-		var docs []map[string]interface{}
-		var mysqlIDs []int64
+		var records []bvRow
 		for rows.Next() {
-			var rr row
-			if scanErr := rows.Scan(&rr.id, &rr.videoID, &rr.title, &rr.context, &rr.summary, &rr.keywords, &rr.remark); scanErr != nil {
+			var rr bvRow
+			if scanErr := rows.Scan(&rr.id, &rr.videoID, &rr.title, &rr.context, &rr.summary, &rr.keywords, &rr.remark, &rr.mediaIDStr, &rr.categories, &rr.tags); scanErr != nil {
 				c.writeStartJSON(w, 500, "mysql scan failed: "+scanErr.Error(), nil)
 				return
 			}
-			// 与索引字段定义一致：id 使用 bilibili_video_<mysql_id>
-			docID := fmt.Sprintf("bilibili_video_%d", rr.id)
-			mysqlIDs = append(mysqlIDs, rr.id)
-			docs = append(docs, map[string]interface{}{
-				"id":      docID,
-				"key":     rr.videoID,
-				"title":   rr.title,
-				"content": rr.context,
-				"summary": rr.summary,
-				"keywords": rr.keywords,
-				"remark":  rr.remark,
-				"status":  1,
-			})
+			records = append(records, rr)
 		}
 		if err := rows.Err(); err != nil {
 			c.writeStartJSON(w, 500, "mysql rows error: "+err.Error(), nil)
 			return
+		}
+
+		seenMedia := make(map[uint64]struct{})
+		var mediaIDs []uint64
+		for _, rr := range records {
+			mid, perr := strconv.ParseUint(strings.TrimSpace(rr.mediaIDStr), 10, 64)
+			if perr != nil || mid == 0 {
+				continue
+			}
+			if _, ok := seenMedia[mid]; ok {
+				continue
+			}
+			seenMedia[mid] = struct{}{}
+			mediaIDs = append(mediaIDs, mid)
+		}
+
+		mediaNames, catNamesByMedia, tagNamesByMedia, enrichErr := c.loadMediaListEnrichment(mediaIDs)
+		if enrichErr != nil {
+			c.writeStartJSON(w, 500, "mysql media enrichment failed: "+enrichErr.Error(), nil)
+			return
+		}
+
+		var docs []map[string]interface{}
+		var mysqlIDs []int64
+		for _, rr := range records {
+			docID := fmt.Sprintf("bilibili_video_%d", rr.id)
+			mysqlIDs = append(mysqlIDs, rr.id)
+
+			var mediaIDOut, mediaNameOut, catNamesOut, tagNamesOut string
+			if mid, perr := strconv.ParseUint(strings.TrimSpace(rr.mediaIDStr), 10, 64); perr == nil && mid > 0 {
+				mediaIDOut = fmt.Sprintf("%d", mid)
+				mediaNameOut = mediaNames[mid]
+				catNamesOut = catNamesByMedia[mid]
+				tagNamesOut = tagNamesByMedia[mid]
+			}
+
+			docs = append(docs, map[string]interface{}{
+				"id":               docID,
+				"key":              rr.videoID,
+				"title":            rr.title,
+				"content":          rr.context,
+				"summary":          rr.summary,
+				"keywords":         rr.keywords,
+				"remark":           rr.remark,
+				"status":           1,
+				"categories_ids":   rr.categories,
+				"tags_ids":         rr.tags,
+				"categories_names": catNamesOut,
+				"tags_names":       tagNamesOut,
+				"media_id":         mediaIDOut,
+				"media_name":       mediaNameOut,
+			})
 		}
 
 		if len(docs) == 0 {
@@ -387,6 +555,108 @@ func (c *MeiliController) MeilisearchStart(w http.ResponseWriter, r *http.Reques
 		c.writeStartJSON(w, 500, "unsupported table: "+table, map[string]any{"supported": []string{"bilibili_video"}})
 		return
 	}
+}
+
+// MeilisearchSearch 代理搜索并支持服务端拼接多 id filter。
+//
+// 路由：POST /api/meilisearch/search
+// body 示例：
+// {
+//   "q":"", "limit":20, "offset":0,
+//   "ids":["bilibili_video_721","bilibili_video_713"]
+// }
+func (c *MeiliController) MeilisearchSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		c.fail(w, http.StatusMethodNotAllowed, "method not allowed, use POST", nil)
+		return
+	}
+	var req meiliSearchProxyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.fail(w, http.StatusBadRequest, "invalid json body", nil)
+		return
+	}
+
+	indexUID := strings.TrimSpace(req.Index)
+	if indexUID == "" {
+		indexUID = strings.TrimSpace(os.Getenv("BASE_DB_MEILISEARCH_INDEX"))
+	}
+	if indexUID == "" {
+		indexUID = "media"
+	}
+
+	ids := make([]string, 0, len(req.IDs))
+	for _, id := range req.IDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if req.IDsCSV != "" {
+		for _, id := range strings.Split(req.IDsCSV, ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	searchBody := map[string]any{
+		"q":      req.Q,
+		"limit":  req.Limit,
+		"offset": req.Offset,
+	}
+
+	if len(ids) > 0 {
+		// 构造 filter：
+		// id = "a" OR id = "b" OR ...
+		parts := make([]string, 0, len(ids))
+		for _, id := range ids {
+			// Meilisearch filter 字符串需要转义引号与反斜杠
+			escaped := strings.ReplaceAll(id, `\`, `\\`)
+			escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+			parts = append(parts, fmt.Sprintf("id = \"%s\"", escaped))
+		}
+		searchBody["filter"] = strings.Join(parts, " OR ")
+	} else if strings.TrimSpace(req.Filter) != "" {
+		// 兼容：允许传入 id = "a, b, c" 这种逗号拼接字符串
+		// 若匹配成功且逗号数量>0，就拆分为 OR 条件。
+		filter := strings.TrimSpace(req.Filter)
+		// 捕获 id = " ... " 内部内容
+		re := regexp.MustCompile(`(?i)id\s*=\s*"(.*?)"`)
+		if m := re.FindStringSubmatch(filter); len(m) == 2 {
+			rawInner := m[1]
+			// inner 内部按逗号拆分，并 trim 空格
+			tokens := make([]string, 0, 1)
+			for _, tok := range strings.Split(rawInner, ",") {
+				tok = strings.TrimSpace(tok)
+				if tok != "" {
+					tokens = append(tokens, tok)
+				}
+			}
+			if len(tokens) > 1 {
+				parts := make([]string, 0, len(tokens))
+				for _, id := range tokens {
+					escaped := strings.ReplaceAll(id, `\`, `\\`)
+					escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+					parts = append(parts, fmt.Sprintf("id = \"%s\"", escaped))
+				}
+				searchBody["filter"] = strings.Join(parts, " OR ")
+			} else {
+				// 只有一个 token，保留原 filter（保证单个 id 兼容）
+				searchBody["filter"] = filter
+			}
+		} else {
+			// 不符合预期格式：直接透传 filter
+			searchBody["filter"] = filter
+		}
+	}
+
+	body, status, err := c.client.Search(indexUID, searchBody)
+	if err != nil {
+		c.fail(w, status, err.Error(), body)
+		return
+	}
+	c.writeRaw(w, status, body)
 }
 
 // MeiliDispatch 统一入口：根据路径和方法分发到对应 handler，注册在 /api/meili/

@@ -25,6 +25,7 @@ func New(addr string) *http.Server {
 		sqlDB = nil
 	}
 	deepseekVerifyCtrl := controller.NewDeepseekVerifyController(sqlDB)
+	dbStatusCountCtrl := controller.NewDbStatusCountController(sqlDB)
 
 	// 精确路径先注册，避免被 "/" 或 "/api/archive/" 抢匹配（Go 1.21 下 longest match 仍可能异常）
 	mux.HandleFunc("/api/archives/delete", launchCtrl.DeleteArchives)
@@ -45,6 +46,9 @@ func New(addr string) *http.Server {
 	mux.HandleFunc("/api/deepseek-verify/status", deepseekVerifyCtrl.DeepseekVerifyStatus)
 	mux.HandleFunc("/api/deepseek-verify/last-failure", deepseekVerifyCtrl.DeepseekVerifyLastFailure)
 
+	// MySQL：按表与 status 统计行数（表名白名单）
+	mux.HandleFunc("/api/db/status-count", dbStatusCountCtrl.StatusCount)
+
 	mux.HandleFunc("/api/deepseek-verify", deepseekVerifyCtrl.DeepseekVerify)
 	mux.HandleFunc("/api/deepseek-verify/", deepseekVerifyCtrl.DeepseekVerify)
 
@@ -60,8 +64,10 @@ func New(addr string) *http.Server {
 	meiliCtrl := controller.NewMeiliController(meiliClient, sqlDB)
 	mux.HandleFunc("/api/meili/", meiliCtrl.MeiliDispatch)
 
-	// Meilisearch 同步（使用 .env.dev 的 BASE_DB_MEILISEARCH_* 配置）
+	// Meilisearch 同步（使用 BASE_DB_MEILISEARCH_*，见 .env / .env.development 等）
 	mux.HandleFunc("/api/meilisearch/start", meiliCtrl.MeilisearchStart)
+	// Meilisearch 搜索代理（支持服务端拼接多 id filter）
+	mux.HandleFunc("/api/meilisearch/search", meiliCtrl.MeilisearchSearch)
 
 	// 兜底放最后
 	mux.HandleFunc("/", handler.Home)

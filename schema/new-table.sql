@@ -117,6 +117,7 @@ CREATE TABLE `crawler_cookies_account` (
 DROP TABLE IF EXISTS `bilibili_video`;
 CREATE TABLE `bilibili_video` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -141,6 +142,8 @@ CREATE TABLE `bilibili_video` (
     `audio_download_url` VARCHAR(2048)               DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -159,6 +162,7 @@ CREATE TABLE `bilibili_video` (
 DROP TABLE IF EXISTS `bilibili_video_comment`;
 CREATE TABLE `bilibili_video_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -176,6 +180,8 @@ CREATE TABLE `bilibili_video_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -194,6 +200,7 @@ CREATE TABLE `bilibili_video_comment` (
 DROP TABLE IF EXISTS `bilibili_up_info`;
 CREATE TABLE `bilibili_up_info` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -208,6 +215,8 @@ CREATE TABLE `bilibili_up_info` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -225,6 +234,7 @@ CREATE TABLE `bilibili_up_info` (
 DROP TABLE IF EXISTS `douyin_aweme`;
 CREATE TABLE `douyin_aweme` (
     `id`                 INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`            BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`            VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `sec_uid`            VARCHAR(128)                 DEFAULT NULL    COMMENT '用户sec_uid',
@@ -253,7 +263,9 @@ CREATE TABLE `douyin_aweme` (
     `audio_download_url` VARCHAR(2048)                 DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
-    `context`            TEXT                                         COMMENT '内容',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
+    `context`           TEXT                                         COMMENT '内容',
     `remark`             VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`             TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
     `locked`             TINYINT                      DEFAULT 0       COMMENT '锁定，1:锁定 / 0: 未锁',
@@ -271,6 +283,7 @@ CREATE TABLE `douyin_aweme` (
 DROP TABLE IF EXISTS `douyin_aweme_comment`;
 CREATE TABLE `douyin_aweme_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `sec_uid`           VARCHAR(128)                 DEFAULT NULL    COMMENT '用户sec_uid',
@@ -295,6 +308,8 @@ CREATE TABLE `douyin_aweme_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -313,6 +328,7 @@ CREATE TABLE `douyin_aweme_comment` (
 DROP TABLE IF EXISTS `dy_creator`;
 CREATE TABLE `dy_creator` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(128)        NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -330,6 +346,8 @@ CREATE TABLE `dy_creator` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -346,6 +364,7 @@ CREATE TABLE `dy_creator` (
 DROP TABLE IF EXISTS `kuaishou_video`;
 CREATE TABLE `kuaishou_video` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -367,6 +386,8 @@ CREATE TABLE `kuaishou_video` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -385,6 +406,7 @@ CREATE TABLE `kuaishou_video` (
 DROP TABLE IF EXISTS `kuaishou_video_comment`;
 CREATE TABLE `kuaishou_video_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -402,6 +424,8 @@ CREATE TABLE `kuaishou_video_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -420,6 +444,7 @@ CREATE TABLE `kuaishou_video_comment` (
 DROP TABLE IF EXISTS `kuaishou_creator`;
 CREATE TABLE `kuaishou_creator` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -436,6 +461,8 @@ CREATE TABLE `kuaishou_creator` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -452,6 +479,7 @@ CREATE TABLE `kuaishou_creator` (
 DROP TABLE IF EXISTS `weibo_note`;
 CREATE TABLE `weibo_note` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -476,6 +504,8 @@ CREATE TABLE `weibo_note` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -495,6 +525,7 @@ CREATE TABLE `weibo_note` (
 DROP TABLE IF EXISTS `weibo_note_comment`;
 CREATE TABLE `weibo_note_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)                  DEFAULT NULL    COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -516,6 +547,8 @@ CREATE TABLE `weibo_note_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -535,6 +568,7 @@ CREATE TABLE `weibo_note_comment` (
 DROP TABLE IF EXISTS `xhs_creator`;
 CREATE TABLE `xhs_creator` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -552,6 +586,8 @@ CREATE TABLE `xhs_creator` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -568,6 +604,7 @@ CREATE TABLE `xhs_creator` (
 DROP TABLE IF EXISTS `xhs_note`;
 CREATE TABLE `xhs_note` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -594,6 +631,8 @@ CREATE TABLE `xhs_note` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -612,6 +651,7 @@ CREATE TABLE `xhs_note` (
 DROP TABLE IF EXISTS `xhs_note_comment`;
 CREATE TABLE `xhs_note_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -633,6 +673,8 @@ CREATE TABLE `xhs_note_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -651,6 +693,7 @@ CREATE TABLE `xhs_note_comment` (
 DROP TABLE IF EXISTS `tieba_note`;
 CREATE TABLE `tieba_note` (
     `id`                BIGINT              NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `note_id`           VARCHAR(644)        NOT NULL                 COMMENT '帖子ID',
     `title`             VARCHAR(255)        NOT NULL                 COMMENT '帖子标题',
@@ -673,6 +716,8 @@ CREATE TABLE `tieba_note` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -690,6 +735,7 @@ CREATE TABLE `tieba_note` (
 DROP TABLE IF EXISTS `tieba_comment`;
 CREATE TABLE `tieba_comment` (
     `id`                BIGINT              NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `comment_id`        VARCHAR(255)        NOT NULL                 COMMENT '评论ID',
     `parent_comment_id` VARCHAR(255)                 DEFAULT ''      COMMENT '父评论ID',
@@ -711,6 +757,8 @@ CREATE TABLE `tieba_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -729,6 +777,7 @@ CREATE TABLE `tieba_comment` (
 DROP TABLE IF EXISTS `weibo_creator`;
 CREATE TABLE `weibo_creator` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `nickname`          VARCHAR(64)                  DEFAULT NULL    COMMENT '用户昵称',
@@ -745,6 +794,8 @@ CREATE TABLE `weibo_creator` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -761,6 +812,7 @@ CREATE TABLE `weibo_creator` (
 DROP TABLE IF EXISTS `tieba_creator`;
 CREATE TABLE `tieba_creator` (
     `id`                    INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`               BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`               VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `user_name`             VARCHAR(64)         NOT NULL                 COMMENT '用户名',
@@ -777,7 +829,9 @@ CREATE TABLE `tieba_creator` (
     `audio_download_url` VARCHAR(2048)                    DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
-    `context`               TEXT                                         COMMENT '内容',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
+    `context`           TEXT                                         COMMENT '内容',
     `remark`                VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`                TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
     `locked`                TINYINT                      DEFAULT 0       COMMENT '锁定，1:锁定 / 0: 未锁',
@@ -793,6 +847,7 @@ CREATE TABLE `tieba_creator` (
 DROP TABLE IF EXISTS `zhihu_content`;
 CREATE TABLE `zhihu_content` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `content_id`        VARCHAR(64)         NOT NULL                 COMMENT '内容ID',
     `content_type`      VARCHAR(16)         NOT NULL                 COMMENT '内容类型(article | answer | zvideo)',
@@ -817,6 +872,8 @@ CREATE TABLE `zhihu_content` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -835,6 +892,7 @@ CREATE TABLE `zhihu_content` (
 DROP TABLE IF EXISTS `zhihu_comment`;
 CREATE TABLE `zhihu_comment` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `comment_id`        VARCHAR(64)         NOT NULL                 COMMENT '评论ID',
     `parent_comment_id` VARCHAR(64)                  DEFAULT NULL    COMMENT '父评论ID',
@@ -856,6 +914,8 @@ CREATE TABLE `zhihu_comment` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',
@@ -875,6 +935,7 @@ CREATE TABLE `zhihu_comment` (
 DROP TABLE IF EXISTS `zhihu_creator`;
 CREATE TABLE `zhihu_creator` (
     `id`                INT                 NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `media_id`  VARCHAR(64)                  DEFAULT ''    COMMENT '媒体ID-取自media_list的id',
     `task_id`           BIGINT              NOT NULL DEFAULT 0       COMMENT '爬虫任务id(关联crawler_tasks.id)',
     `user_id`           VARCHAR(64)         NOT NULL                 COMMENT '用户ID',
     `user_link`         VARCHAR(255)        NOT NULL                 COMMENT '用户主页链接',
@@ -897,6 +958,8 @@ CREATE TABLE `zhihu_creator` (
     `audio_download_url` VARCHAR(2048)                DEFAULT NULL    COMMENT '音频下载地址',
     `summary`          VARCHAR(255)                  DEFAULT NULL    COMMENT '总结',
     `keywords`         VARCHAR(255)                  DEFAULT NULL    COMMENT '关键字',
+    `tags`            VARCHAR(255)                  DEFAULT ''    COMMENT '视频标签',
+    `categories`             VARCHAR(255)                  DEFAULT ''    COMMENT '视频类型',
     `context`           TEXT                                         COMMENT '内容',
     `remark`            VARCHAR(512)                 DEFAULT ''      COMMENT '备注',
     `status`            TINYINT                      DEFAULT 0       COMMENT '状态，1:成功 / 0: 默认 / -1: 失败',

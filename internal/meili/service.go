@@ -30,9 +30,10 @@ func (c *Client) IndexGet(uid string) ([]byte, int, error) {
 	return c.Get(indexPath + "/" + uid)
 }
 
-// IndexUpdate 更新索引（如 primaryKey）
+// IndexUpdate 更新索引设置（settings）
 func (c *Client) IndexUpdate(uid string, body map[string]interface{}) ([]byte, int, error) {
-	return c.Put(indexPath+"/"+uid, body)
+	// Meilisearch 更新设置使用 PATCH /indexes/:uid/settings
+	return c.Patch(indexPath+"/"+uid+"/settings", body)
 }
 
 // IndexDelete 删除索引
@@ -95,4 +96,9 @@ func (c *Client) DocUpdate(indexUID string, documents interface{}) ([]byte, int,
 		return nil, 0, err
 	}
 	return c.Put(indexPath+"/"+indexUID+"/documents", json.RawMessage(b))
+}
+
+// SearchMeilisearch 在 /indexes/:uid/search 做查询（POST）
+func (c *Client) Search(indexUID string, body any) ([]byte, int, error) {
+	return c.Post(indexPath+"/"+indexUID+"/search", body)
 }

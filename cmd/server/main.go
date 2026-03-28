@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,12 +19,24 @@ var buildEnv string
 
 func appEnv() string {
 	if v := os.Getenv("APP_ENV"); v != "" {
-		return v
+		return normalizeEnvName(v)
 	}
 	if buildEnv != "" {
-		return buildEnv
+		return normalizeEnvName(buildEnv)
 	}
 	return "development"
+}
+
+// normalizeEnvName 统一 dev/prod 等别名为 development/production，便于匹配 .env.development / .env.production。
+func normalizeEnvName(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "dev":
+		return "development"
+	case "prod":
+		return "production"
+	default:
+		return strings.TrimSpace(s)
+	}
 }
 
 func envOrUnknown(s string) string {
@@ -39,9 +52,11 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		switch appEnv() {
-		case "prod":
+		case "production":
 			port = "8090"
-		case "development", "":
+		case "test":
+			port = "8080"
+		case "development":
 			port = "8080"
 		default:
 			port = "8080"

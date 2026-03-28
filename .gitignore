@@ -15,6 +15,9 @@ go.work
 .DS_Store
 Thumbs.db
 
-# 环境配置（复制 .env.example 为 .env 后按需修改）
+# 环境配置（*.example 可提交）
 .env
 .env.local
+.env.development
+.env.test
+.env.production

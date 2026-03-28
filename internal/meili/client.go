@@ -55,7 +55,7 @@ func NewClientWithHostKey(host, key string) *Client {
 	}
 }
 
-// NewClientFromBaseEnv 从 .env.dev 的 BASE_DB_MEILISEARCH_* 变量读取连接配置
+// NewClientFromBaseEnv 从环境变量 BASE_DB_MEILISEARCH_* 读取（由 .env / .env.development 等加载）
 func NewClientFromBaseEnv() *Client {
 	baseURL := os.Getenv("BASE_DB_MEILISEARCH_URL")
 	basePort := os.Getenv("BASE_DB_MEILISEARCH_PORT")
@@ -122,6 +122,11 @@ func (c *Client) Post(path string, body any) ([]byte, int, error) {
 // Put PUT 请求
 func (c *Client) Put(path string, body any) ([]byte, int, error) {
 	return c.do(http.MethodPut, path, body)
+}
+
+// Patch PATCH 请求
+func (c *Client) Patch(path string, body any) ([]byte, int, error) {
+	return c.do(http.MethodPatch, path, body)
 }
 
 // Delete DELETE 请求
