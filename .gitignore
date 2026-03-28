@@ -14,10 +14,3 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
-
-# 环境配置（*.example 可提交）
-.env
-.env.local
-.env.development
-.env.test
-.env.production
